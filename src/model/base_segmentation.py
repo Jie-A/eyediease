@@ -9,151 +9,18 @@ import segmentation_models_pytorch as smp
 import collections
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
-import re
-import albumentations as A
 from typing import List
 import numpy as np
-from torch.utils.data import Dataset
 from pathlib import Path
 import os
 import torch
 import catalyst
-from skimage.io import imread as mask_read
-from catalyst.contrib.utils.cv import image as cata_image
 from catalyst import utils
-from albumentations.pytorch import ToTensor
+import ttach as tta
 
-
-class LesionSegmentation(Dataset):
-    def __init__(self, images: List[Path], masks: List[Path], transform=None):
-        self.images = images
-        self.masks = masks
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.images)
-
-    def __getitem__(self, index: int) -> dict:
-        image_path = self.images[index]
-
-        image = cata_image.imread(image_path)
-        results = {'image': image}
-
-        if self.masks is not None:
-            mask = mask_read(self.masks[index]).astype(np.float32)
-            results['mask'] = mask
-
-        if self.transform is not None:
-            results = self.transform(**results)
-
-        results['filaname'] = image_path.name
-
-        return results
-
-
-class Transform(object):
-
-    def __init__(self, image_size: int = 1024, preprocessing_fn=None):
-        self.image_size = image_size
-        self.preprocessing_fn = preprocessing_fn
-
-    def pre_transform(self):
-        return [
-            A.Resize(self.image_size,
-                     self.image_size, always_apply=True)
-        ]
-
-    def hard_transform(self):
-        result = [
-            A.RandomRotate90(),
-            A.Cutout(),
-            A.RandomBrightnessContrast(
-                brightness_limit=0.2, contrast_limit=0.2, p=0.3
-            ),
-            A.GridDistortion(p=0.3),
-            A.HueSaturationValue(p=0.3)
-        ]
-
-        return result
-
-    def resize_transforms(self):
-        pre_size = int(self.image_size * 2)
-
-        random_crop = A.Compose([
-            A.SmallestMaxSize(pre_size, p=1),
-            A.RandomCrop(
-                self.image_size, self.image_size, p=1
-            )
-        ])
-
-        rescale = A.Compose(
-            [A.Resize(self.image_size, self.image_size, p=1)])
-
-        random_crop_big = A.Compose([
-            A.LongestMaxSize(pre_size, p=1),
-            A.RandomCrop(
-                self.image_size, self.image_size, p=1
-            )
-        ])
-
-        # Converts the image to a square of size self.image_size x self.image_size
-        result = [
-            A.OneOf([
-                random_crop,
-                rescale,
-                random_crop_big
-            ], p=1)
-        ]
-
-        return result
-
-    def post_transform(self):
-        return [A.Lambda(image=self.preprocessing_fn), ToTensor()]
-
-    def _get_compose(self, transform):
-        result = A.Compose([
-            item for sublist in transform for item in sublist
-        ])
-
-        return result
-
-    def train_transform(self):
-        return self._get_compose([
-            self.resize_transforms(),
-            self.hard_transform(),
-            self.post_transform()
-        ])
-
-    def validation_transform(self):
-        return self._get_compose([
-            self.pre_transform(),
-            self.post_transform()
-        ])
-
-    def test_transform(self):
-        return self.validation_transform()
-
-
-def get_datapath(img_path: Path, mask_path: Path, lesion_type: str = 'EX'):
-    lesion_path = lesion_paths[lesion_type]
-    img_posfix = '.jpg'
-    mask_posfix = '_' + lesion_type + '.tif'
-    mask_names = os.listdir(os.path.join(mask_path, lesion_path))
-
-    mask_ids = list(map(lambda mask: re.sub(
-        mask_posfix, '', mask), mask_names))
-
-    restored_name = list(map(lambda x: x + img_posfix, mask_ids))
-
-    full_img_paths = list(
-        map(lambda x: Path(os.path.join(img_path, x)), restored_name))
-    full_mask_paths = list(
-        map(lambda x: Path(os.path.join(mask_path, lesion_path, x)), mask_names))
-
-    print('[INFO] full img paths', len(full_img_paths))
-    print('[INFO] full_mask_paths', len(full_mask_paths))
-
-    return sorted(full_img_paths), sorted(full_mask_paths)
+from base_dataset import LesionSegmentation
+from base_transform import Transform
+from base_utils import get_datapath, save_output as so
 
 
 def get_loader(
@@ -269,7 +136,8 @@ def main(args):
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, factor=0.25, patience=2)
 
-    logdir = os.path.join(OUTDIR, args['type']+'_lr' + str(args['lr']) + '_ep' + str(args['epochs']))
+    logdir = os.path.join(
+        CKPT, args['type']+'_lr' + str(args['lr']) + '_ep' + str(args['epochs']))
 
     if not os.path.isdir(logdir):
         os.makedirs(logdir, exist_ok=True)
@@ -345,6 +213,105 @@ def main(args):
         verbose=True,
     )
 
+    return {'runner': runner, 'transform': transforms, 'logdir': logdir}
+
+
+def test(args, info: dict):
+    runner = info['runner']
+    transform = info['transform']
+    logdir = info['logdir']
+
+    TEST_IMAGES = sorted(test_image_dir.glob("*.jpg"))
+
+    test_transform = transform.test_transform()
+    # create test dataset
+    test_dataset = LesionSegmentation(
+        TEST_IMAGES,
+        transforms=test_transform
+    )
+
+    num_workers: int = 4
+
+    infer_loader = DataLoader(
+        test_dataset,
+        batch_size=args['testbatchsize'],
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True
+    )
+
+    # this get predictions for the whole loader
+    predictions = np.vstack(list(map(
+        lambda x: x["logits"].cpu().numpy(),
+        runner.predict_loader(loader=infer_loader,
+                              resume=f"{logdir}/checkpoints/best.pth", fp16=True)
+    )))
+
+    threshold = 0.5
+
+    for i, (features, logits) in enumerate(zip(test_dataset, predictions)):
+        image_name = features['filename']
+        mask_ = torch.from_numpy(logits[0]).sigmoid()
+        mask = utils.detach(mask_ > threshold).astype("float")
+
+        out_name = Path(os.path.join(
+            OUTDIR, Path(logdir).name, image_name + '.jpg'))
+        so(mask, out_name)  # PIL Image format
+
+
+def test_tta(args, info: dict):
+    runner = info['runner']
+    transform = info['transform']
+    logdir = info['logdir']
+
+    TEST_IMAGES = sorted(test_image_dir.glob("*.jpg"))
+
+    test_transform = transform.test_transform()
+    # create test dataset
+    test_dataset = LesionSegmentation(
+        TEST_IMAGES,
+        transforms=test_transform
+    )
+
+    num_workers: int = 4
+
+    infer_loader = DataLoader(
+        test_dataset,
+        batch_size=args['testbatchsize'],
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True
+    )
+
+    # D4 makes horizontal and vertical flips + rotations for [0, 90, 180, 270] angels.
+    # and then merges the result masks with merge_mode="mean"
+    tta_model = tta.SegmentationTTAWrapper(
+        runner.model, tta.aliases.d4_transform(), merge_mode="mean")
+
+    tta_runner = SupervisedRunner(
+        model=tta_model,
+        device=utils.get_device(),
+        input_key="image"
+    )
+
+    # this get predictions for the whole loader
+    predictions = np.vstack(list(map(
+        lambda x: x["logits"].cpu().numpy(),
+        tta_runner.predict_loader(loader=infer_loader,
+                                  resume=f"{logdir}/checkpoints/best.pth", fp16=True)
+    )))
+
+    threshold = 0.5
+
+    for i, (features, logits) in enumerate(zip(test_dataset, predictions)):
+        image_name = features['filename']
+        mask_ = torch.from_numpy(logits[0]).sigmoid()
+        mask = utils.detach(mask_ > threshold).astype("float")
+
+        out_name = Path(os.path.join(
+            TTA_DIR, Path(logdir).name, image_name + '.jpg'))
+        so(mask, out_name)  # PIL Image format
+
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
@@ -353,6 +320,7 @@ if __name__ == '__main__':
     parse.add_argument('--fp16', default=True, type=bool)
     parse.add_argument('--lr', default=0.001, type=float)
     parse.add_argument('--epochs', default=20, type=int)
+    parse.add_argument('--testbatchsize', default=8, type=int)
 
     args = vars(parse.parse_args())
 
@@ -369,13 +337,16 @@ if __name__ == '__main__':
     test_image_dir = ROOT / '1. Original Images' / 'b. Testing Set'
     test_mask_dir = ROOT / '2. All Segmentation Groundtruths' / 'b. Testing Set'
 
-    lesion_paths = {
-        'MA': '1. Microaneurysms',
-        'EX': '3. Hard Exudates',
-        'HE': '2. Haemorrhages',
-        'SE': '4. Soft Exudates'
-    }
+    CKPT = '../../models/base_segmentation'
+    OUTDIR = '../../outputs'
+    TTA_DIR = '../../outputs/tta'
 
-    OUTDIR = '../../models/base_segmentation'
+    for dir in [CKPT, OUTDIR, TTA_DIR]:
+        if not os.path.isdir(dir):
+            os.makedirs(dir, exist_ok=True)
 
-    main(args)
+    info = main(args)
+
+    test(info, args)
+
+    test_tta(info, args)
