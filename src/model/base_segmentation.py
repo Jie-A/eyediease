@@ -227,7 +227,7 @@ def test(args, info: dict):
     # create test dataset
     test_dataset = LesionSegmentation(
         TEST_IMAGES,
-        transforms=test_transform
+        transform=test_transform
     )
 
     num_workers: int = 4
@@ -244,7 +244,7 @@ def test(args, info: dict):
     predictions = np.vstack(list(map(
         lambda x: x["logits"].cpu().numpy(),
         runner.predict_loader(loader=infer_loader,
-                              resume=f"{logdir}/checkpoints/best.pth", fp16=True)
+                              resume=f"{logdir}/checkpoints/best.pth", fp16=args['fp16'])
     )))
 
     threshold = 0.5
@@ -254,13 +254,15 @@ def test(args, info: dict):
         mask_ = torch.from_numpy(logits[0]).sigmoid()
         mask = utils.detach(mask_ > threshold).astype("float")
 
-        out_name = Path(os.path.join(
-            OUTDIR, Path(logdir).name, image_name + '.jpg'))
+        out_path = Path(OUTDIR) / Path(logdir).name
+        if not os.path.isdir(out_path):
+            os.makedirs(out_path, exist_ok=True)
+
+        out_name = out_path / image_name
         so(mask, out_name)  # PIL Image format
 
 
 def test_tta(args, info: dict):
-    runner = info['runner']
     transform = info['transform']
     logdir = info['logdir']
 
@@ -270,7 +272,7 @@ def test_tta(args, info: dict):
     # create test dataset
     test_dataset = LesionSegmentation(
         TEST_IMAGES,
-        transforms=test_transform
+        transform=test_transform
     )
 
     num_workers: int = 4
@@ -283,10 +285,25 @@ def test_tta(args, info: dict):
         pin_memory=True
     )
 
+    ENCODER = 'resnet18'
+    ENCODER_WEIGHTS = 'imagenet'
+
+    # Model return logit values
+    model = smp.Unet(
+        encoder_name=ENCODER,
+        encoder_weights=None,
+        activation=None,
+        in_channels=3,
+        classes=1
+    )
+
+    checkpoints = torch.load(f"{logdir}/checkpoints/best.pth")
+    model.load_state_dict(checkpoints['model_state_dict'])
+
     # D4 makes horizontal and vertical flips + rotations for [0, 90, 180, 270] angels.
     # and then merges the result masks with merge_mode="mean"
     tta_model = tta.SegmentationTTAWrapper(
-        runner.model, tta.aliases.d4_transform(), merge_mode="mean")
+        model, tta.aliases.d4_transform(), merge_mode="mean")
 
     tta_runner = SupervisedRunner(
         model=tta_model,
@@ -295,21 +312,30 @@ def test_tta(args, info: dict):
     )
 
     # this get predictions for the whole loader
-    predictions = np.vstack(list(map(
-        lambda x: x["logits"].cpu().numpy(),
-        tta_runner.predict_loader(loader=infer_loader,
-                                  resume=f"{logdir}/checkpoints/best.pth", fp16=True)
-    )))
+    tta_predictions = [] 
+    for batch in infer_loader:
+        tta_pred = tta_runner.predict_batch(batch)
+        # print(tta_pred['logits'].cpu().numpy().shape)
+        tta_predictions.append(tta_pred['logits'].cpu().numpy())
+    
+    tta_predictions = np.vstack(tta_predictions)
+    # print(tta_predictions.shape)
 
     threshold = 0.5
 
-    for i, (features, logits) in enumerate(zip(test_dataset, predictions)):
+    # import sys
+    # sys.exit(1)
+
+    for i, (features, logits) in enumerate(zip(test_dataset, tta_predictions)):
         image_name = features['filename']
         mask_ = torch.from_numpy(logits[0]).sigmoid()
         mask = utils.detach(mask_ > threshold).astype("float")
 
-        out_name = Path(os.path.join(
-            TTA_DIR, Path(logdir).name, image_name + '.jpg'))
+        out_path = Path(TTA_DIR) / Path(logdir).name
+        if not os.path.isdir(out_path):
+            os.makedirs(out_path, exist_ok=True)
+
+        out_name = out_path / image_name
         so(mask, out_name)  # PIL Image format
 
 
@@ -330,16 +356,18 @@ if __name__ == '__main__':
     utils.set_global_seed(SEED)
     utils.prepare_cudnn(deterministic=True)
 
-    ROOT = Path('../../data/raw')
+    MAIN = Path('..')
+
+    ROOT = MAIN / 'data/raw'
 
     train_image_dir = ROOT / '1. Original Images' / 'a. Training Set'
     train_mask_dir = ROOT / '2. All Segmentation Groundtruths' / 'a. Training Set'
     test_image_dir = ROOT / '1. Original Images' / 'b. Testing Set'
     test_mask_dir = ROOT / '2. All Segmentation Groundtruths' / 'b. Testing Set'
 
-    CKPT = '../../models/base_segmentation'
-    OUTDIR = '../../outputs'
-    TTA_DIR = '../../outputs/tta'
+    CKPT = str(MAIN) + '/models/base_segmentation'
+    OUTDIR = str(MAIN) + '/outputs'
+    TTA_DIR = str(MAIN) + '/outputs/tta'
 
     for dir in [CKPT, OUTDIR, TTA_DIR]:
         if not os.path.isdir(dir):
@@ -347,6 +375,8 @@ if __name__ == '__main__':
 
     info = main(args)
 
-    test(info, args)
+    print('Normal test')
+    test(args, info)
 
-    test_tta(info, args)
+    print('TTA Test')
+    test_tta(args, info)
