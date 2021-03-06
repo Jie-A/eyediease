@@ -56,7 +56,7 @@ def show(index: int, images: List[Path], masks: List[Path], transforms=None) -> 
     name = image_path.name
 
     image = cata_image.imread(image_path)
-    mask = mask_read(masks[index])
+    mask = mask_read(masks[index]).astype(np.float32)
 
     if transforms is not None:
         temp = transforms(image=image, mask=mask)
@@ -74,7 +74,7 @@ def show_random(images: List[Path], masks: List[Path], transforms=None) -> None:
 
 def save_output(pred_masks: np.ndarray, out_path: Path):
     # Rescale to 0-255 and convert to uint8
-    rescaled = (255.0 / pred_masks.max() *
+    rescaled = (255.0 / (pred_masks.max() + np.finfo(float).eps) *
                 (pred_masks - pred_masks.min())).astype(np.uint8)
 
     im = Image.fromarray(rescaled)

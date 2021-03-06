@@ -286,7 +286,6 @@ def test_tta(args, info: dict):
     )
 
     ENCODER = 'resnet18'
-    ENCODER_WEIGHTS = 'imagenet'
 
     # Model return logit values
     model = smp.Unet(
