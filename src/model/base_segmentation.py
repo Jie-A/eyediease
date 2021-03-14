@@ -355,7 +355,7 @@ if __name__ == '__main__':
     utils.set_global_seed(SEED)
     utils.prepare_cudnn(deterministic=True)
 
-    MAIN = Path('..')
+    MAIN = Path('../../')
 
     ROOT = MAIN / 'data/raw'
 
