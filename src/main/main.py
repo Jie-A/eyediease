@@ -3,7 +3,7 @@ sys.path.append('..')
 
 import base_utils
 from data import OneLesionSegmentation
-from data import EasyTransform
+from data import MediumTransform as Transform
 from config import BaseConfig
 from losses import get_loss
 from optim import get_optimizer
@@ -29,7 +29,6 @@ from pytorch_toolbelt.utils.catalyst import (
 )
 from pytorch_toolbelt.utils import count_parameters
 from pytorch_toolbelt.utils.random import set_manual_seed
-# from pytorch_toolbelt.optimization.functional import freeze_model
 
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -47,8 +46,12 @@ def get_model(params, model_name):
         **params
     )
 
-    preprocessing_fn = smp.encoders.get_preprocessing_fn(
-        params['encoder_name'], params['encoder_weights'])
+    if params['encoder_weights'] is None:
+        preprocessing_fn = smp.encoders.get_preprocessing_fn(
+            params['encoder_name'], "imagenet")
+    else:
+        preprocessing_fn = smp.encoders.get_preprocessing_fn(
+            params['encoder_name'], params['encoder_weights'])
 
     return model, preprocessing_fn
 
@@ -129,8 +132,8 @@ def main(configs, seed):
     base_utils.log_pretty_table(['full_img_paths', 'full_mask_paths'], [[len(ex_dirs), len(mask_dirs)]])
     
     #Define transform (augemntation)
-    transforms = EasyTransform(
-        1024,
+    transforms = Transform(
+        configs['scale_size'],
         preprocessing_fn=preprocessing_fn
     )
 

@@ -4,6 +4,8 @@ import segmentation_models_pytorch as smp
 import ttach as tta
 from catalyst.dl import utils
 from catalyst.dl.runner import SupervisedRunner
+import albumentations as A
+from albumentations.pytorch.transforms import ToTensorV2
 
 import os
 from pathlib import Path
@@ -26,27 +28,23 @@ def get_model(params, model_name):
         **params
     )
 
-    preprocessing_fn = smp.encoders.get_preprocessing_fn(
-        params['encoder_name'], params['encoder_weights'])
-
-    return model, preprocessing_fn
+    return model
 
 def test_tta(config, logdir):
     test_img_dir = Path(config['test_img_paths'])
     TEST_IMAGES = sorted(test_img_dir.glob("*.jpg"))
 
     # Model return logit values
-    model, preprocessing_fn = get_model(model_name=config['model_name'], params=config['model'])
+    model = get_model(model_name=config['model_name'], params=config['model'])
 
-    transform = EasyTransform(1024, preprocessing_fn)
-    test_transform = transform.test_transform()
-    preprocessing = transform.get_preprocessing()
+    transform = EasyTransform(1024)
+    augmentation = transform.resize_transforms() + [A.Normalize(), ToTensorV2()]
+    test_transform = A.Compose(augmentation)
 
     # create test dataset
     test_dataset = TestSegmentation(
         TEST_IMAGES,
         transform=test_transform,
-        preprocessing_fn=preprocessing
     )
 
     num_workers: int = 4
@@ -81,12 +79,12 @@ def test_tta(config, logdir):
 
     tta_predictions = np.vstack(tta_predictions)
 
-    threshold = 0.5
+    threshold = 0.5 #Need to choose best threshold
 
     for i, (features, logits) in enumerate(zip(test_dataset, tta_predictions)):
         image_name = features['filename']
         mask_ = torch.from_numpy(logits[0]).sigmoid()
-        mask = utils.detach(mask_ > threshold).astype("float")
+        mask = utils.detach(mask_ > threshold).astype(np.float32)
 
         out_path = Path(config['out_dir']) / 'tta' / config['lesion_type'] / Path(logdir).name
         if not os.path.isdir(out_path):

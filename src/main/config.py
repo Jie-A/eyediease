@@ -7,28 +7,29 @@ class BaseConfig:
 
     train_img_path = '../../data/raw/1. Original Images/a. Training Set'
     train_mask_path = '../../data/raw/2. All Segmentation Groundtruths/a. Training Set/'
-    augmentation = 'easy'
+    augmentation = 'medium'
+    scale_size = 1024
 
-    finetune = True #Traning only decoder
+    finetune = False #Traning only decoder
     learning_rate = 1e-3
-    num_epochs = 20
+    num_epochs = 50
     batch_size = 8
     val_batch_size = 8
     is_fp16 = True
     weight_decay=1e-5
 
-    model_name = "DeepLabV3Plus"
+    model_name = "Unet"
     
     model = {
-    "encoder_name" : 'resnet18',
+    "encoder_name": 'resnet34',
     "encoder_depth": 5,
-    "encoder_weights" : 'imagenet',
+    "encoder_weights" : None,
     }
 
     metric = "iou"
 
-    optimizer = "Adam"
-    criterion = {"bce": 1.0, "log_dice": 1.0}
+    optimizer = "adamw"
+    criterion = {"bce": 2.0, "log_dice": 1.0}
     scheduler = "reduce"
     mode = "max"
 
@@ -41,14 +42,27 @@ class BaseConfig:
         son.update(dad)
         for k, v in son.items():
             if not k.startswith('__') and k != 'get_all_attributes':
+                # if isinstance(v, dict):
+                #     pass
+                # else:
                 d[k] = v
 
         return d
+
+
+
 
 class TestConfig(BaseConfig):
     test_img_paths = '../../data/raw/1. Original Images/b. Testing Set'
     test_mask_paths = '../../data/raw/2. All Segmentation Groundtruths/b. Testing Set'
     out_dir = '../../outputs'
+    out_figures = out_dir + '/figures'
+
+
+
+
+
+
 
 if __name__ == '__main__':
     # pprint(TestConfig.get_all_attributes())
