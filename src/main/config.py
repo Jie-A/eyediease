@@ -5,8 +5,10 @@ __all__ = ['BaseConfig', 'TestConfig']
 class BaseConfig:
     lesion_type = 'EX'
 
-    train_img_path = '../../data/raw/1. Original Images/a. Training Set'
-    train_mask_path = '../../data/raw/2. All Segmentation Groundtruths/a. Training Set/'
+    dataset_name = 'IDRiD'
+
+    train_img_path = '../../data/raw/IDRiD/1. Original Images/a. Training Set'
+    train_mask_path = '../../data/raw/IDRiD/2. All Segmentation Groundtruths/a. Training Set/'
     augmentation = 'medium'
     scale_size = 1024
 
