@@ -2,7 +2,7 @@ import sys
 sys.path.append('..')
 
 import base_utils
-from data import OneLesionSegmentation
+from data import OneLesionSegmentation, MultiLesionSegmentation, CLASS_COLORS
 from data import MediumTransform as Transform
 from config import BaseConfig
 from losses import get_loss
@@ -25,6 +25,7 @@ from catalyst.contrib.nn import OneCycleLRWithWarmup
 from pytorch_toolbelt.utils.catalyst import (
     HyperParametersCallback,
     draw_binary_segmentation_predictions,
+    draw_multilabel_segmentation_predictions,
     ShowPolarBatchesCallback,
 )
 from pytorch_toolbelt.utils import count_parameters
@@ -59,6 +60,7 @@ def get_model(params, model_name):
 def get_loader(
     images: List[Path],
     masks: List[Path],
+    mask_dir: str,
     random_state: int,
     valid_size: float = 0.2,
     batch_size: int = 4,
@@ -67,7 +69,7 @@ def get_loader(
     train_transforms_fn=None,
     valid_transforms_fn=None,
     preprocessing_fn=None,
-
+    mode='binary'
 ):
     indices = np.arange(len(images))
 
@@ -75,21 +77,37 @@ def get_loader(
         indices, test_size=valid_size, random_state=random_state, shuffle=True)
 
     np_images = np.array(images)
-    np_masks = np.array(masks)
 
-    train_dataset = OneLesionSegmentation(
-        np_images[train_indices].tolist(),
-        np_masks[train_indices].tolist(),
-        transform=train_transforms_fn,
-        preprocessing_fn=preprocessing_fn
-    )
+    if mode == 'binary':
+        np_masks = np.array(masks)
+        
+        train_dataset = OneLesionSegmentation(
+            np_images[train_indices].tolist(),
+            np_masks[train_indices].tolist(),
+            transform=train_transforms_fn,
+            preprocessing_fn=preprocessing_fn
+        )
 
-    valid_dataset = OneLesionSegmentation(
-        np_images[valid_indices].tolist(),
-        np_masks[valid_indices].tolist(),
-        transform=valid_transforms_fn,
-        preprocessing_fn=preprocessing_fn
-    )
+        valid_dataset = OneLesionSegmentation(
+            np_images[valid_indices].tolist(),
+            np_masks[valid_indices].tolist(),
+            transform=valid_transforms_fn,
+            preprocessing_fn=preprocessing_fn
+        )
+    else:
+        train_dataset = MultiLesionSegmentation(
+            np_images[train_indices].tolist(),
+            mask_dir=mask_dir,
+            transform=train_transforms_fn,
+            preprocessing_fn=preprocessing_fn
+        )
+
+        valid_dataset = MultiLesionSegmentation(
+            np_images[valid_indices].tolist(),
+            mask_dir=mask_dir,
+            transform=valid_transforms_fn,
+            preprocessing_fn=preprocessing_fn
+        )
 
     train_loader = DataLoader(
         train_dataset,
@@ -126,11 +144,16 @@ def main(configs, seed):
     model, preprocessing_fn = get_model(configs['model'], configs['model_name'])
     
 
-    ex_dirs, mask_dirs = base_utils.get_datapath(
-        img_path=TRAIN_IMG_DIRS, mask_path=TRAIN_MASK_DIRS, lesion_type=configs['lesion_type'])
+    if configs['mode'] == 'binary':
+        ex_dirs, mask_dirs = base_utils.get_datapath(
+            img_path=TRAIN_IMG_DIRS, mask_path=TRAIN_MASK_DIRS, lesion_type=configs['lesion_type'])
 
-    base_utils.log_pretty_table(['full_img_paths', 'full_mask_paths'], [[len(ex_dirs), len(mask_dirs)]])
-    
+        base_utils.log_pretty_table(['full_img_paths', 'full_mask_paths'], [[len(ex_dirs), len(mask_dirs)]])
+    elif configs['mode'] == 'multiclass':
+        pass
+    else:
+        ex_dirs = list(TRAIN_IMG_DIRS.glob('*.jpg'))
+
     #Define transform (augemntation)
     transforms = Transform(
         configs['scale_size'],
@@ -145,6 +168,7 @@ def main(configs, seed):
     loader, log_info = get_loader(
         images=ex_dirs, 
         masks=mask_dirs, 
+        mask_dir=TRAIN_MASK_DIRS,
         random_state=seed, 
         batch_size=configs['batch_size'], 
         val_batch_size=configs['val_batch_size'],
@@ -214,9 +238,14 @@ def main(configs, seed):
 
     hyper_callbacks = HyperParametersCallback(configs)
 
-    visualize_predictions = partial(
-        draw_binary_segmentation_predictions, image_key="image", targets_key="mask"
-    )
+    if configs['mode'] == 'binary':
+        visualize_predictions = partial(
+            draw_binary_segmentation_predictions, image_key="image", targets_key="mask"
+        )
+    elif configs['mode'] == 'multilabel':
+        visualize_predictions = partial(
+            draw_multilabel_segmentation_predictions, image_key="image", targets_key="mask", class_colors = CLASS_COLORS
+        )
 
     show_batches = ShowPolarBatchesCallback(
         visualize_predictions, metric=configs['metric'], minimize=True)
@@ -229,10 +258,10 @@ def main(configs, seed):
     #End define
 
     current_time = datetime.now().strftime("%b%d_%H_%M")
-    prefix = f"{configs['lesion_type']}/{current_time}"
+    prefix = f"All/{current_time}"
     log_dir = os.path.join("../../models/", prefix)
     os.makedirs(log_dir, exist_ok=False)
-    logger = WandbLogger(project="HardExudatesSegmentation",
+    logger = WandbLogger(project="LesionSegmentation",
                          name=current_time)
 
 

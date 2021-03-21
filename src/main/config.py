@@ -7,6 +7,8 @@ class BaseConfig:
 
     dataset_name = 'IDRiD'
 
+    mode = 'multilabel'
+
     train_img_path = '../../data/raw/IDRiD/1. Original Images/a. Training Set'
     train_mask_path = '../../data/raw/IDRiD/2. All Segmentation Groundtruths/a. Training Set/'
     augmentation = 'medium'
@@ -20,12 +22,13 @@ class BaseConfig:
     is_fp16 = True
     weight_decay=1e-5
 
-    model_name = "Unet"
+    model_name = "DeepLabV3Plus"
     
     model = {
     "encoder_name": 'resnet34',
     "encoder_depth": 5,
     "encoder_weights" : None,
+    "classes": 4
     }
 
     metric = "iou"
