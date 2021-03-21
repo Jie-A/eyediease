@@ -100,10 +100,9 @@ class MultiLesionSegmentation(Dataset):
             path = os.path.join(self.mask_dir, lesion_paths[clss], mask_name)
             if os.path.exists(path):
                 mask = mask_read(path).astype(np.float32)
-                mask = torch.from_numpy(mask)
                 masks.append(mask)
 
-        mask = torch.vstack(masks).float()
+        mask = np.stack(masks, axis=-1).astype(np.float32)
 
         if self.transform is not None:
             results = self.transform(image=image, mask=mask)
