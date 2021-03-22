@@ -2,7 +2,7 @@ import sys
 sys.path.append('..')
 
 import base_utils
-from data import OneLesionSegmentation, MultiLesionSegmentation, CLASS_COLORS
+from data import OneLesionSegmentation, MultiLesionSegmentation, CLASS_COLORS, CLASS_NAMES
 from data import MediumTransform as Transform
 from config import BaseConfig
 from losses import get_loss
@@ -59,7 +59,6 @@ def get_model(params, model_name):
 
 def get_loader(
     images: List[Path],
-    masks: List[Path],
     mask_dir: str,
     random_state: int,
     valid_size: float = 0.2,
@@ -69,6 +68,7 @@ def get_loader(
     train_transforms_fn=None,
     valid_transforms_fn=None,
     preprocessing_fn=None,
+    masks: List[Path]=None,
     mode='binary'
 ):
     indices = np.arange(len(images))
@@ -83,14 +83,14 @@ def get_loader(
         
         train_dataset = OneLesionSegmentation(
             np_images[train_indices].tolist(),
-            np_masks[train_indices].tolist(),
+            masks = np_masks[train_indices].tolist(),
             transform=train_transforms_fn,
             preprocessing_fn=preprocessing_fn
         )
 
         valid_dataset = OneLesionSegmentation(
             np_images[valid_indices].tolist(),
-            np_masks[valid_indices].tolist(),
+            masks = np_masks[valid_indices].tolist(),
             transform=valid_transforms_fn,
             preprocessing_fn=preprocessing_fn
         )
@@ -143,17 +143,6 @@ def main(configs, seed):
     # Get model
     model, preprocessing_fn = get_model(configs['model'], configs['model_name'])
     
-
-    if configs['mode'] == 'binary':
-        ex_dirs, mask_dirs = base_utils.get_datapath(
-            img_path=TRAIN_IMG_DIRS, mask_path=TRAIN_MASK_DIRS, lesion_type=configs['lesion_type'])
-
-        base_utils.log_pretty_table(['full_img_paths', 'full_mask_paths'], [[len(ex_dirs), len(mask_dirs)]])
-    elif configs['mode'] == 'multiclass':
-        pass
-    else:
-        ex_dirs = list(TRAIN_IMG_DIRS.glob('*.jpg'))
-
     #Define transform (augemntation)
     transforms = Transform(
         configs['scale_size'],
@@ -164,6 +153,17 @@ def main(configs, seed):
     val_transform = transforms.validation_transform()
     preprocessing = transforms.get_preprocessing()
 
+    if configs['data_mode'] == 'binary':
+        ex_dirs, mask_dirs = base_utils.get_datapath(
+            img_path=TRAIN_IMG_DIRS, mask_path=TRAIN_MASK_DIRS, lesion_type=configs['lesion_type'])
+
+        base_utils.log_pretty_table(['full_img_paths', 'full_mask_paths'], [[len(ex_dirs), len(mask_dirs)]])
+    elif configs['data_mode'] == 'multiclass':
+        pass
+    else:
+        ex_dirs = list(TRAIN_IMG_DIRS.glob('*.jpg'))
+        mask_dirs = None
+    
     # Get data loader
     loader, log_info = get_loader(
         images=ex_dirs, 
@@ -175,7 +175,8 @@ def main(configs, seed):
         num_workers= 4,
         train_transforms_fn=train_transform,
         valid_transforms_fn=val_transform,
-        preprocessing_fn=preprocessing
+        preprocessing_fn=preprocessing,
+        mode=configs['data_mode']
     )
 
     base_utils.log_pretty_table(log_info[0], log_info[1])
@@ -238,11 +239,11 @@ def main(configs, seed):
 
     hyper_callbacks = HyperParametersCallback(configs)
 
-    if configs['mode'] == 'binary':
+    if configs['data_mode'] == 'binary':
         visualize_predictions = partial(
             draw_binary_segmentation_predictions, image_key="image", targets_key="mask"
         )
-    elif configs['mode'] == 'multilabel':
+    elif configs['data_mode'] == 'multilabel':
         visualize_predictions = partial(
             draw_multilabel_segmentation_predictions, image_key="image", targets_key="mask", class_colors = CLASS_COLORS
         )
@@ -253,15 +254,26 @@ def main(configs, seed):
     early_stopping = EarlyStoppingCallback(
         patience=10, metric=configs['metric'], minimize=False)
 
-    iou_scores = IouCallback(input_key="mask")
-    dice_scores = DiceCallback(input_key="mask")
+    iou_scores = IouCallback(
+        input_key="mask",
+        activation="Sigmoid",
+        per_class=False,
+        class_args= CLASS_NAMES
+    )
+
+    dice_scores = DiceCallback(
+        input_key="mask",
+        activation="Sigmoid",
+        per_class=False,
+        class_args=CLASS_NAMES
+    )
     #End define
 
     current_time = datetime.now().strftime("%b%d_%H_%M")
-    prefix = f"All/{current_time}"
+    prefix = f"{configs['lesion_type']}/{current_time}"
     log_dir = os.path.join("../../models/", prefix)
     os.makedirs(log_dir, exist_ok=False)
-    logger = WandbLogger(project="LesionSegmentation",
+    logger = WandbLogger(project="HaemorrhageSegmentation",
                          name=current_time)
 
 

@@ -18,7 +18,7 @@ test_size=27
 gt_dir = test_config['test_mask_paths'] + \
 	'/' + lesion_paths[test_config['lesion_type']]
 
-pred_dir = test_config['out_dir'] + '/' + 'tta/EX/Mar15_22_06'
+pred_dir = test_config['out_dir'] + '/' + 'tta/HE/Mar22_21_00'
 
 sn = np.empty(test_size+1, dtype=float) 
 ppv = np.empty(test_size+1, dtype=float)
@@ -75,7 +75,7 @@ sn_csv = np.stack((image_paths,sn), axis=1)
 ppv_csv = np.stack((image_paths,ppv), axis=1)
 sp_csv = np.stack((image_paths,sp), axis=1)
 
-save_dir = '../../outputs/result_assessment/EX/Mar15_22_06'
+save_dir = '../../outputs/result_assessment/HE/Mar22_21_00'
 
 if not os.path.exists(save_dir):
 	os.makedirs(save_dir, exist_ok=True)

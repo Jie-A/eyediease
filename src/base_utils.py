@@ -28,6 +28,14 @@ lesion_paths = {
 }
 
 
+def minmax_normalize(img, norm_range=(0, 1), orig_range=(0, 255)):
+    # range(0, 1)
+    norm_img = (img - orig_range[0]) / (orig_range[1] - orig_range[0])
+    # range(min_value, max_value)
+    norm_img = norm_img * (norm_range[1] - norm_range[0]) + norm_range[0]
+    return norm_img
+    
+
 def get_datapath(img_path: Path, mask_path: Path, lesion_type: str = 'EX'):
     lesion_path = lesion_paths[lesion_type]
     img_posfix = '.jpg'

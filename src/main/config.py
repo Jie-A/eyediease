@@ -2,33 +2,34 @@ from pprint import pprint
 
 __all__ = ['BaseConfig', 'TestConfig']
 
+
 class BaseConfig:
-    lesion_type = 'EX'
+    lesion_type = 'HE'
 
     dataset_name = 'IDRiD'
 
-    mode = 'multilabel'
+    data_mode = 'binary'
 
     train_img_path = '../../data/raw/IDRiD/1. Original Images/a. Training Set'
     train_mask_path = '../../data/raw/IDRiD/2. All Segmentation Groundtruths/a. Training Set/'
     augmentation = 'medium'
     scale_size = 1024
 
-    finetune = False #Traning only decoder
+    finetune = False  # Traning only decoder
     learning_rate = 1e-3
     num_epochs = 50
     batch_size = 8
     val_batch_size = 8
     is_fp16 = True
-    weight_decay=1e-5
+    weight_decay = 1e-5
 
     model_name = "DeepLabV3Plus"
-    
+
     model = {
-    "encoder_name": 'resnet34',
-    "encoder_depth": 5,
-    "encoder_weights" : None,
-    "classes": 4
+        "encoder_name": 'resnet34',
+        "encoder_depth": 5,
+        "encoder_weights": None,
+        "classes": 1
     }
 
     metric = "iou"
@@ -47,14 +48,9 @@ class BaseConfig:
         son.update(dad)
         for k, v in son.items():
             if not k.startswith('__') and k != 'get_all_attributes':
-                # if isinstance(v, dict):
-                #     pass
-                # else:
                 d[k] = v
 
         return d
-
-
 
 
 class TestConfig(BaseConfig):
@@ -64,13 +60,7 @@ class TestConfig(BaseConfig):
     out_figures = out_dir + '/figures'
 
 
-
-
-
-
-
 if __name__ == '__main__':
-    # pprint(TestConfig.get_all_attributes())
     d = dict(BaseConfig.__dict__).copy()
     d_1 = dict(BaseConfig.__base__.__dict__).copy()
 

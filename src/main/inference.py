@@ -76,7 +76,7 @@ if __name__ == "__main__":
     device = ('cuda' if torch.cuda.is_available() else 'cpu')
     model = get_model(test_config['model_name'], test_config['model'])
 
-    logdir = '../../models/EX/Mar15_22_06/checkpoints/best.pth'
+    logdir = '../../models/HE/Mar22_21_00/checkpoints/best.pth'
 
     best_checkpoints = torch.load(logdir)
     best_model = best_checkpoints['model_state_dict']
@@ -121,3 +121,4 @@ if __name__ == "__main__":
 
         print('[INFO] auc-pr', sum_prauc)
         #Mar15_22_06 auc [INFO] auc-pr 0.3344325889668523
+        #Mar22_21_00 auc-pr 0.042575961985214766
