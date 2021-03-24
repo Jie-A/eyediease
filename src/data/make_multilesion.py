@@ -5,7 +5,7 @@ import re
 import cv2
 from skimage.io import imread as mask_read
 from PIL import Image
-
+import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
 
@@ -53,14 +53,16 @@ if __name__ == "__main__":
 
                 assert list(np.unique(mask)) == [0, 1]
 
-                mask = mask*CLASS_COLORS[i]
-                masks.append(mask)
+                final_mask = cv2.bitwise_or(final_mask, mask, dst=final_mask)
+                final_mask = final_mask*CLASS_COLORS[i]
+
+                # masks.append(mask)
                 i += 1
         
-        final_mask = cv2.bitwise_or(final_mask, mask, dst=final_mask)
+        # final_mask = cv2.bitwise_or(final_mask, mask, dst=final_mask)
         print(np.unique(final_mask))
-        # final_mask = Image.fromarray(final_mask, mode='P')
-        # final_mask.save(save_path / image_path.name)
-
+        final_mask = Image.fromarray(final_mask)
+        final_mask.save(save_path / re.sub('.jpg', '.tif', image_path.name))
+        # plt.savefig(sav)
 
 
