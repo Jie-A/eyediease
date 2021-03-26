@@ -54,13 +54,14 @@ for image_path in os.listdir(gt_dir):
 	pred_p = np.sum(arr_pred)
 	
 	false_p = pred_p - true_p
-	actual_n = 1024*1024 - actual_p
+	actual_n = test_config['scale_size']*test_config['scale_size'] - actual_p
 	true_n = actual_n - false_p
 
 	if actual_p == 0:
 		sn[i] = 1
 	else:
 		sn[i] = float(true_p)/float(actual_p)
+		
 	if pred_p == 0:
 		ppv[i] = 1
 	else:
