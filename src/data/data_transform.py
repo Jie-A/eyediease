@@ -2,7 +2,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensor
 import cv2
 
-__all__ = ['BaseTransform', 'EasyTransform', 'MediumTransform']
+__all__ = ['BaseTransform', 'EasyTransform', 'MediumTransform' ,'NormalTransform']
 
 class BaseTransform(object):
 
@@ -136,3 +136,19 @@ class MediumTransform(EasyTransform):
         ]
 
 
+class NormalTransform(EasyTransform):
+    def __init__(self, *args, **kwargs):
+        super(NormalTransform, self).__init__(*args, **kwargs)
+
+    def hard_transform(self):
+        return [
+            A.VerticalFlip(p=0.5),
+            A.HorizontalFlip(p=0.5),
+            A.RandomRotate90(p=0.7),
+            # A.OneOf([
+            #     A.ElasticTransform(alpha=120, sigma=120 * 0.05,
+            #                        alpha_affine=120 * 0.03, p=0.5),
+            #     A.GridDistortion(p=0.5),
+            #     A.OpticalDistortion(distort_limit=2, shift_limit=0.5, p=0.5)
+            # ], p=0.5),
+        ]

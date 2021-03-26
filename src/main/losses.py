@@ -74,21 +74,18 @@ class ResizeTargetToPrediction2d(nn.Module):
 
 
 class WeightedBCEWithLogits(nn.Module):
-    def __init__(self, mask_key, weight_key, ignore_index: Optional[int] = -100, reduction="mean"):
+    def __init__(self, pos_weights, ignore_index: Optional[int] = -100, reduction="mean"):
         super().__init__()
         self.ignore_index = ignore_index
         self.reduction = reduction
-        self.weight_key = weight_key
-        self.mask_key = mask_key
+        self.pos_weights = pos_weights
 
-    def forward(self, label_input, target: Dict[str, torch.Tensor]):
-        targets = target[self.mask_key]
-        weights = target[self.weight_key]
+    def forward(self, label_input: torch.Tensor, target: torch.Tensor):
 
         if self.ignore_index is not None:
-            not_ignored_mask = (targets != self.ignore_index).float()
+            not_ignored_mask = (target != self.ignore_index).float()
 
-        loss = F.binary_cross_entropy_with_logits(label_input, targets, reduction="none") * weights
+        loss = nn.BCEWithLogitsLoss(reduce=None, pos_weight=self.pos_weights)(label_input, target)
 
         if self.ignore_index is not None:
             loss = loss * not_ignored_mask.float()
@@ -129,6 +126,9 @@ def get_loss(loss_name: str, ignore_index=None):
 
     if loss_name.lower() == "bce":
         return SoftBCEWithLogitsLoss(ignore_index=ignore_index)
+
+    if loss_name.lower() == 'wbce':
+        return WeightedBCEWithLogits(ignore_index=ignore_index)
 
     if loss_name.lower() == "ce":
         return nn.CrossEntropyLoss()

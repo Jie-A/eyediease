@@ -10,6 +10,7 @@ from albumentations.pytorch.transforms import ToTensorV2
 import os
 from pathlib import Path
 import numpy as np
+from PIL import Image
 
 import sys
 sys.path.append('..')
@@ -30,12 +31,12 @@ def get_model(params, model_name):
 
     return model
 
-def test_tta(config, logdir):
+def test_tta(config, args):
     test_img_dir = Path(config['test_img_paths'])
     TEST_IMAGES = sorted(test_img_dir.glob("*.jpg"))
 
     # Model return logit values
-    model = get_model(model_name=config['model_name'], params=config['model'])
+    model = get_model(model_name=config['model_name'], params=config['model_params'])
 
     transform = EasyTransform(1024)
     augmentation = transform.resize_transforms() + [A.Normalize(), ToTensorV2()]
@@ -57,7 +58,7 @@ def test_tta(config, logdir):
         pin_memory=True
     )
 
-    checkpoints = torch.load(f"{logdir}/checkpoints/best.pth")
+    checkpoints = torch.load(f"{args['logdir']}/checkpoints/best.pth")
     model.load_state_dict(checkpoints['model_state_dict'])
 
     # D4 makes horizontal and vertical flips + rotations for [0, 90, 180, 270] angels.
@@ -79,25 +80,42 @@ def test_tta(config, logdir):
 
     tta_predictions = np.vstack(tta_predictions)
 
-    threshold = 0.5 #Need to choose best threshold
+    if args['create_prob']:
+        for i, (features, logits) in enumerate(zip(test_dataset, tta_predictions)):
+            image_name = features['filename']
+            mask_ = torch.from_numpy(logits[0]).sigmoid()
+            mask_arr = mask_.numpy()
+            
+            out_path = Path(config['out_dir']) / 'tta' / \
+                config['lesion_type'] / 'prob_image'/ Path(args['logdir']).name
+            if not os.path.isdir(out_path):
+                os.makedirs(out_path, exist_ok=True)
 
-    for i, (features, logits) in enumerate(zip(test_dataset, tta_predictions)):
-        image_name = features['filename']
-        mask_ = torch.from_numpy(logits[0]).sigmoid()
-        mask = utils.detach(mask_ > threshold).astype(np.float32)
+            out_name = out_path / image_name
 
-        out_path = Path(config['out_dir']) / 'tta' / config['lesion_type'] / Path(logdir).name
-        if not os.path.isdir(out_path):
-            os.makedirs(out_path, exist_ok=True)
+            predicted_save = Image.fromarray(
+                (mask_arr*255).astype('uint8'))
+            predicted_save.save(out_name, "JPEG", quality=100)
+    else:
+        threshold = 0.7 #Need to choose best threshold
+        for i, (features, logits) in enumerate(zip(test_dataset, tta_predictions)):
+            image_name = features['filename']
+            mask_ = torch.from_numpy(logits[0]).sigmoid()
+            mask = utils.detach(mask_ > threshold).astype(np.float32)
 
-        out_name = out_path / image_name
-        so(mask, out_name)  # PIL Image format
+            out_path = Path(config['out_dir']) / 'tta' / config['lesion_type'] / Path(args['logdir']).name
+            if not os.path.isdir(out_path):
+                os.makedirs(out_path, exist_ok=True)
+
+            out_name = out_path / image_name
+            so(mask, out_name)  # PIL Image format
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
     parse.add_argument('--logdir', required=True, help='Path to where the model checkpoint is saved')
+    parse.add_argument('--create_prob', default=True, help='Just create a prob mask not binary')
     args = vars(parse.parse_args())
 
     config = TestConfig.get_all_attributes()
 
-    test_tta(config, args['logdir'])
+    test_tta(config, args)

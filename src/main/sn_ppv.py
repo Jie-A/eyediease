@@ -6,19 +6,28 @@ import cv2
 import albumentations as A
 
 sys.path.append('..')
+import argparse
 
 from config import TestConfig
 from base_utils import lesion_paths
 
+parse = argparse.ArgumentParser()
+parse.add_argument('--dir', required=True)
+
+args = vars(parse.parse_args())
+
 test_config = TestConfig.get_all_attributes()
-transform = A.Compose([A.LongestMaxSize(
-	test_config['scale_size']), A.PadIfNeeded(test_config['scale_size'], test_config['scale_size'], border_mode=cv2.BORDER_CONSTANT, value=0)])
+transform = A.Compose([
+	A.LongestMaxSize(
+	test_config['scale_size']), 
+	A.PadIfNeeded(test_config['scale_size'], test_config['scale_size'], border_mode=cv2.BORDER_CONSTANT, value=0)]
+	)
 
 test_size=27
 gt_dir = test_config['test_mask_paths'] + \
 	'/' + lesion_paths[test_config['lesion_type']]
 
-pred_dir = test_config['out_dir'] + '/' + 'tta/HE/Mar22_21_00'
+pred_dir = test_config['out_dir'] + '/' + 'tta/' + args['dir']
 
 sn = np.empty(test_size+1, dtype=float) 
 ppv = np.empty(test_size+1, dtype=float)
@@ -34,12 +43,9 @@ for image_path in os.listdir(gt_dir):
 
 	pred_image_path = re.sub('_' + test_config['lesion_type'] + '.tif', '.jpg', image_path)
 	im_pred = Image.open(pred_dir+'/'+pred_image_path)
-	im_pred = np.array(im_pred)
-	_, im_pred = cv2.threshold(im_pred, 0, 255, cv2.THRESH_BINARY)
-	arr_pred = (im_pred/255).astype(np.uint8)
-	
-	# print('DEBUG', arr_gt.shape)
-	# print('DEBUG', np.unique(arr_pred))
+	im_binary = im_pred.convert('1')
+	arr_pred = np.asarray(im_binary).astype(np.uint8)
+
 	if len(arr_gt.shape) > 2:
 		arr_gt = np.sum(arr_gt, axis=-1)
 
@@ -75,7 +81,7 @@ sn_csv = np.stack((image_paths,sn), axis=1)
 ppv_csv = np.stack((image_paths,ppv), axis=1)
 sp_csv = np.stack((image_paths,sp), axis=1)
 
-save_dir = '../../outputs/result_assessment/HE/Mar22_21_00'
+save_dir = '../../outputs/result_assessment/' + args['dir']
 
 if not os.path.exists(save_dir):
 	os.makedirs(save_dir, exist_ok=True)

@@ -71,6 +71,7 @@ def get_scheduler(scheduler_name: str, optimizer, lr, num_epochs, batches_in_epo
             max_lr=lr,
             step_size_up=batches_in_epoch // 4,
             # mode='exp_range',
+            cycle_momentum=True,
             gamma=0.99,
         )
 
