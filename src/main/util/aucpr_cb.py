@@ -3,7 +3,7 @@ from typing import Callable, Optional
 import numpy as np
 import torch
 from catalyst.core import Callback, CallbackOrder
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import average_precision_score, roc_auc_score, roc_curve, precision_recall_curve, auc
 from torch import Tensor
 
 __all__ = ["AucPRMetricCallback"]
@@ -60,6 +60,6 @@ class AucPRMetricCallback(Callback):
     def on_loader_end(self, runner):
         y_trues = np.concatenate(all_gather(self.y_trues))
         y_preds = np.concatenate(all_gather(self.y_preds))
-        score = average_precision_score(
-            y_true=y_trues, y_score=y_preds, average=self.average)
+        precision, recall, _ = precision_recall_curve(y_trues.reshape(-1), y_preds.reshape(-1))
+        score = auc(recall, precision)
         runner.loader_metrics[self.prefix] = float(score)

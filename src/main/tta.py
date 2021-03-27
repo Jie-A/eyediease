@@ -11,11 +11,12 @@ import os
 from pathlib import Path
 import numpy as np
 from PIL import Image
+from tqdm.auto import tqdm
 
 import sys
 sys.path.append('..')
 
-from base_utils import save_output as so
+from util import save_output as so
 from data import TestSegmentation
 from data import EasyTransform
 from config import TestConfig
@@ -80,8 +81,8 @@ def test_tta(config, args):
 
     tta_predictions = np.vstack(tta_predictions)
 
-    if args['create_prob']:
-        for i, (features, logits) in enumerate(zip(test_dataset, tta_predictions)):
+    if args['createprob']:
+        for i, (features, logits) in tqdm(enumerate(zip(test_dataset, tta_predictions))):
             image_name = features['filename']
             mask_ = torch.from_numpy(logits[0]).sigmoid()
             mask_arr = mask_.numpy()
@@ -113,7 +114,7 @@ def test_tta(config, args):
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
     parse.add_argument('--logdir', required=True, help='Path to where the model checkpoint is saved')
-    parse.add_argument('--create_prob', default=True, help='Just create a prob mask not binary')
+    parse.add_argument('--createprob', type=bool, default=False, help='Just create a prob mask not binary')
     args = vars(parse.parse_args())
 
     config = TestConfig.get_all_attributes()

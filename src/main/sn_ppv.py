@@ -9,7 +9,7 @@ sys.path.append('..')
 import argparse
 
 from config import TestConfig
-from base_utils import lesion_paths
+from util import lesion_dict
 
 parse = argparse.ArgumentParser()
 parse.add_argument('--dir', required=True)
@@ -25,7 +25,7 @@ transform = A.Compose([
 
 test_size=27
 gt_dir = test_config['test_mask_paths'] + \
-	'/' + lesion_paths[test_config['lesion_type']]
+	'/' + lesion_dict[test_config['lesion_type']]
 
 pred_dir = test_config['out_dir'] + '/' + 'tta/' + args['dir']
 
@@ -61,7 +61,7 @@ for image_path in os.listdir(gt_dir):
 		sn[i] = 1
 	else:
 		sn[i] = float(true_p)/float(actual_p)
-		
+
 	if pred_p == 0:
 		ppv[i] = 1
 	else:

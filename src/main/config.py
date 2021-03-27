@@ -7,7 +7,7 @@ class BaseConfig:
     train_img_path = '../../data/raw/IDRiD/1. Original Images/a. Training Set'
     train_mask_path = '../../data/raw/IDRiD/2. All Segmentation Groundtruths/a. Training Set/'
     
-    lesion_type = 'HE'
+    lesion_type = 'SE'
     dataset_name = 'IDRiD'
     data_mode = 'binary'
     augmentation = 'medium'
@@ -20,7 +20,7 @@ class BaseConfig:
     batch_size = 4
     val_batch_size = 4
     learning_rate = 1e-5
-    learning_rate_decode = 1e-3
+    learning_rate_decode = 1e-4
     weight_decay = 1e-5
     is_fp16 = True
 
@@ -36,14 +36,14 @@ class BaseConfig:
     }
 
     #Choose at first and no need to change
-    metric = "iou"
+    metric = "auc_pr"
     mode = "max"
 
     #Second
     criterion = {"wbce": 1.0, "dice": 1.0}
     pos_weights = [200]
     optimizer = "diffgrad"
-    scheduler = "reduce"
+    scheduler = "cosr"
 
     @classmethod
     def get_all_attributes(cls):
@@ -69,5 +69,4 @@ class TestConfig(BaseConfig):
 if __name__ == '__main__':
     d = dict(BaseConfig.__dict__).copy()
     d_1 = dict(BaseConfig.__base__.__dict__).copy()
-
     pprint(d)

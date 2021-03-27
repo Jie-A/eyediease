@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+import collections
 import os
 import numpy as np
 import random
@@ -20,12 +21,17 @@ import torch
 from prettytable import PrettyTable
 
 
-lesion_paths = {
-    'MA': '1. Microaneurysms',
-    'EX': '3. Hard Exudates',
-    'HE': '2. Haemorrhages',
-    'SE': '4. Soft Exudates'
+Lesion = collections.namedtuple('Lesion', ['dir_name', 'project_name'])
+
+lesion_dict = {
+    'MA': Lesion( dir_name='1. Microaneurysms', project_name='MicroaneurysmsSegmentation'),
+    'EX': Lesion(dir_name='3. Hard Exudates', project_name='HardExudatesSegmentation'),
+    'HE': Lesion(dir_name='2. Haemorrhages',
+           project_name='HaemorrhageSegmentation'),
+    'SE': Lesion(dir_name='4. Soft Exudates',
+           project_name='SoftExudatesSegmentation')
 }
+
 
 
 def minmax_normalize(img, norm_range=(0, 1), orig_range=(0, 255)):
@@ -37,7 +43,7 @@ def minmax_normalize(img, norm_range=(0, 1), orig_range=(0, 255)):
     
 
 def get_datapath(img_path: Path, mask_path: Path, lesion_type: str = 'EX'):
-    lesion_path = lesion_paths[lesion_type]
+    lesion_path = lesion_dict[lesion_type].dir_name
     img_posfix = '.jpg'
     mask_posfix = '_' + lesion_type + '.tif'
     mask_names = os.listdir(os.path.join(mask_path, lesion_path))

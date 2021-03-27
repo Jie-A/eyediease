@@ -30,7 +30,8 @@ import json
 import sys
 sys.path.append('..')
 
-import base_utils
+import util
+from util import lesion_dict, AucPRMetricCallback
 from data import MediumTransform as Transform
 from scheduler import get_scheduler
 from optim import get_optimizer
@@ -155,10 +156,10 @@ def main(configs, seed):
     preprocessing = transforms.get_preprocessing()
 
     if configs['data_mode'] == 'binary':
-        ex_dirs, mask_dirs = base_utils.get_datapath(
+        ex_dirs, mask_dirs = util.get_datapath(
             img_path=TRAIN_IMG_DIRS, mask_path=TRAIN_MASK_DIRS, lesion_type=configs['lesion_type'])
 
-        base_utils.log_pretty_table(['full_img_paths', 'full_mask_paths'], [
+        util.log_pretty_table(['full_img_paths', 'full_mask_paths'], [
                                     [len(ex_dirs), len(mask_dirs)]])
     elif configs['data_mode'] == 'multiclass':
         pass
@@ -182,7 +183,7 @@ def main(configs, seed):
     )
 
     #Visualize on terminal
-    base_utils.log_pretty_table(log_info[0], log_info[1])
+    util.log_pretty_table(log_info[0], log_info[1])
 
     if configs['finetune']:
         #Free all weights in the encoder of model
@@ -268,8 +269,11 @@ def main(configs, seed):
             draw_multilabel_segmentation_predictions, image_key="image", targets_key="mask", class_colors=CLASS_COLORS
         )
 
-    show_batches = ShowPolarBatchesCallback(
-        visualize_predictions, metric=configs['metric'], minimize=False)
+    show_batches_1 = ShowPolarBatchesCallback(
+        visualize_predictions, metric="iou", minimize=False)
+
+    show_batches_2 = ShowPolarBatchesCallback(
+        visualize_predictions, metric="loss", minimize=True)
 
     early_stopping = EarlyStoppingCallback(
         patience=10, metric=configs['metric'], minimize=False)
@@ -281,13 +285,21 @@ def main(configs, seed):
     dice_scores = DiceCallback(
         input_key="mask",
     )
+
+    aucpr_scores = AucPRMetricCallback(
+        input_key="mask",
+    )
+
+    # aucroc_scores = RocAucMetricCallback(
+    #     input_key="mask",
+    # )
     #End define
 
     current_time = datetime.now().strftime("%b%d_%H_%M")
     prefix = f"{configs['lesion_type']}/{current_time}"
     log_dir = os.path.join("../../models/", prefix)
     os.makedirs(log_dir, exist_ok=False)
-    logger = WandbLogger(project="HaemorrhageSegmentation",
+    logger = WandbLogger(project=lesion_dict[configs['lesion_type']].project_name,
                          name=current_time)
 
     #Save config as JSON format
@@ -295,7 +307,7 @@ def main(configs, seed):
         json.dump(configs, f)
 
     callbacks += [hyper_callbacks, early_stopping,
-                  iou_scores, dice_scores, show_batches, logger]
+                  iou_scores, dice_scores, aucpr_scores, show_batches_1, show_batches_2, logger]
 
     
     # class CustomRunner(dl.SupervisedRunner):
@@ -325,12 +337,15 @@ def main(configs, seed):
         scheduler=scheduler,
         main_metric=configs['metric'],
         minimize_metric=False,
+        timeit=True,
         fp16=fp16_params,
         verbose=True,
     )
 
 
 if __name__ == "__main__":
+    os.environ['CUDA_VISIBLE_DEVICES']='0,1,2,3'
+
     SEED = 1999
     set_manual_seed(SEED)
     utils.set_global_seed(SEED)
