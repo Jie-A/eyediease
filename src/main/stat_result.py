@@ -13,6 +13,7 @@ from util import lesion_dict
 
 parse = argparse.ArgumentParser()
 parse.add_argument('--dir', required=True)
+parse.add_argument('--eps', type=float, default=1e-7)
 
 args = vars(parse.parse_args())
 
@@ -25,13 +26,15 @@ transform = A.Compose([
 
 test_size=27
 gt_dir = test_config['test_mask_paths'] + \
-	'/' + lesion_dict[test_config['lesion_type']]
+	'/' + lesion_dict[test_config['lesion_type']].dir_name
 
 pred_dir = test_config['out_dir'] + '/' + 'tta/' + args['dir']
 
 sn = np.empty(test_size+1, dtype=float) 
 ppv = np.empty(test_size+1, dtype=float)
 sp = np.empty(test_size+1, dtype=float)
+dice = np.empty(test_size+1, dtype=float)
+iou = np.empty(test_size+1, dtype=float)
 image_paths = np.empty(test_size+1, dtype=object)
 
 i=0
@@ -57,6 +60,8 @@ for image_path in os.listdir(gt_dir):
 	actual_n = test_config['scale_size']*test_config['scale_size'] - actual_p
 	true_n = actual_n - false_p
 
+	union = actual_p + false_p
+
 	if actual_p == 0:
 		sn[i] = 1
 	else:
@@ -71,16 +76,25 @@ for image_path in os.listdir(gt_dir):
 		sp[i] = 1
 	else:
 		sp[i] = float(true_n)/float(actual_n)
+
+	iou[i] = (true_p + args['eps']*(union == 0).astype('float')) / (actual_p + false_p + args['eps'])
+
+	dice[i] = (2*true_p + args['eps']*(union == 0).astype('float')) / (true_p + actual_p + false_p + args['eps'])
+	
 	i+=1
 
-image_paths[i] = "Total"
+image_paths[i] = "Avg:"
 sn[i] = np.mean(sn[:-1])
 ppv[i] = np.mean(ppv[:-1])
 sp[i] =np.mean(sp[:-1])
+iou[i] = np.mean(iou[:-1])
+dice[i] = np.mean(dice[:-1])
 
 sn_csv = np.stack((image_paths,sn), axis=1)
 ppv_csv = np.stack((image_paths,ppv), axis=1)
 sp_csv = np.stack((image_paths,sp), axis=1)
+iou_csv = np.stack((image_paths, iou), axis=1)
+dice_csv = np.stack((image_paths, dice), axis=1)
 
 save_dir = '../../outputs/result_assessment/' + args['dir']
 
@@ -90,3 +104,5 @@ if not os.path.exists(save_dir):
 np.savetxt(f"{save_dir}/sn.csv", sn_csv, delimiter=",", fmt="%s")
 np.savetxt(f"{save_dir}/ppv.csv", ppv_csv, delimiter=",", fmt="%s")
 np.savetxt(f"{save_dir}/sp.csv", sp_csv, delimiter=",", fmt="%s")
+np.savetxt(f"{save_dir}/iou.csv", iou_csv, delimiter=",", fmt="%s")
+np.savetxt(f"{save_dir}/dice.csv", dice_csv, delimiter=",", fmt="%s")

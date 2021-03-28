@@ -7,7 +7,7 @@ class BaseConfig:
     train_img_path = '../../data/raw/IDRiD/1. Original Images/a. Training Set'
     train_mask_path = '../../data/raw/IDRiD/2. All Segmentation Groundtruths/a. Training Set/'
     
-    lesion_type = 'SE'
+    lesion_type = 'HE'
     dataset_name = 'IDRiD'
     data_mode = 'binary'
     augmentation = 'medium'
@@ -36,10 +36,12 @@ class BaseConfig:
     }
 
     #Choose at first and no need to change
-    metric = "auc_pr"
+    metric = "dice"
     mode = "max"
 
     #Second
+    # https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou
+    # Should we use IOU loss instead of Dice loss in this case ?
     criterion = {"wbce": 1.0, "dice": 1.0}
     pos_weights = [200]
     optimizer = "diffgrad"

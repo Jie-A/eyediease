@@ -12,6 +12,7 @@ from pytorch_toolbelt.utils.catalyst import (
     draw_binary_segmentation_predictions,
     draw_multilabel_segmentation_predictions,
     ShowPolarBatchesCallback,
+    RocAucMetricCallback
 )
 from catalyst.contrib.nn import OneCycleLRWithWarmup
 from catalyst import dl
@@ -290,9 +291,9 @@ def main(configs, seed):
         input_key="mask",
     )
 
-    # aucroc_scores = RocAucMetricCallback(
-    #     input_key="mask",
-    # )
+    aucroc_scores = RocAucMetricCallback(
+        input_key="mask",
+    )
     #End define
 
     current_time = datetime.now().strftime("%b%d_%H_%M")
@@ -307,7 +308,7 @@ def main(configs, seed):
         json.dump(configs, f)
 
     callbacks += [hyper_callbacks, early_stopping,
-                  iou_scores, dice_scores, aucpr_scores, show_batches_1, show_batches_2, logger]
+                  iou_scores, dice_scores, aucpr_scores, aucroc_scores, show_batches_1, show_batches_2, logger]
 
     
     # class CustomRunner(dl.SupervisedRunner):

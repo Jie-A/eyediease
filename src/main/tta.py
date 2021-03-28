@@ -97,8 +97,9 @@ def test_tta(config, args):
             predicted_save = Image.fromarray(
                 (mask_arr*255).astype('uint8'))
             predicted_save.save(out_name, "JPEG", quality=100)
+
     else:
-        threshold = 0.7 #Need to choose best threshold
+        threshold = args['optim_thres'] #Need to choose best threshold
         for i, (features, logits) in enumerate(zip(test_dataset, tta_predictions)):
             image_name = features['filename']
             mask_ = torch.from_numpy(logits[0]).sigmoid()
@@ -115,6 +116,7 @@ if __name__ == '__main__':
     parse = argparse.ArgumentParser()
     parse.add_argument('--logdir', required=True, help='Path to where the model checkpoint is saved')
     parse.add_argument('--createprob', type=bool, default=False, help='Just create a prob mask not binary')
+    parse.add_argument('--optim_thres', type=float, default=0.0, help='The optimal threshold optain from auc-pr curve')
     args = vars(parse.parse_args())
 
     config = TestConfig.get_all_attributes()
