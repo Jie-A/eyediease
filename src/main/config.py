@@ -36,7 +36,7 @@ class BaseConfig:
     }
 
     #Choose at first and no need to change
-    metric = "dice"
+    metric = "auc_pr"
     mode = "max"
 
     #Second
