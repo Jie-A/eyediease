@@ -16,11 +16,11 @@ class BaseConfig:
 
     #Final
     finetune = False  # Traning only decoder
-    num_epochs = 50
-    batch_size = 4
-    val_batch_size = 4
+    num_epochs = 60
+    batch_size = 2
+    val_batch_size = 2
     learning_rate = 1e-5
-    learning_rate_decode = 1e-4
+    learning_rate_decode = 1e-3
     weight_decay = 1e-5
     is_fp16 = True
 
@@ -46,6 +46,9 @@ class BaseConfig:
     pos_weights = [200]
     optimizer = "diffgrad"
     scheduler = "cosr"
+
+
+    resume_path = "../../models/HE/Apr02_17_48/checkpoints/best_full.pth"
 
     @classmethod
     def get_all_attributes(cls):

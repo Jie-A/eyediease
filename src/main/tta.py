@@ -49,7 +49,7 @@ def test_tta(config, args):
         transform=test_transform,
     )
 
-    num_workers: int = 4
+    num_workers: int = 2
 
     infer_loader = DataLoader(
         test_dataset,

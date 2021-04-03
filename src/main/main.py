@@ -10,13 +10,13 @@ from pytorch_toolbelt.utils import count_parameters
 from pytorch_toolbelt.utils.catalyst import (
     HyperParametersCallback,
     draw_binary_segmentation_predictions,
-    draw_multilabel_segmentation_predictions,
+    # draw_multilabel_segmentation_predictions,
     ShowPolarBatchesCallback,
     RocAucMetricCallback
 )
 from catalyst.contrib.nn import OneCycleLRWithWarmup
 from catalyst import dl
-from catalyst.dl.callbacks import WandbLogger
+from catalyst.contrib.callbacks.wandb_logger import WandbLogger
 from catalyst.dl import SupervisedRunner, CriterionCallback, EarlyStoppingCallback, SchedulerCallback, MetricAggregationCallback, IouCallback, DiceCallback
 from catalyst import utils
 from iglovikov_helper_functions.dl.pytorch import add_weight_decay
@@ -176,7 +176,7 @@ def main(configs, seed):
         random_state=seed,
         batch_size=configs['batch_size'],
         val_batch_size=configs['val_batch_size'],
-        num_workers=4,
+        num_workers=2,
         train_transforms_fn=train_transform,
         valid_transforms_fn=val_transform,
         preprocessing_fn=preprocessing,
@@ -265,10 +265,10 @@ def main(configs, seed):
         visualize_predictions = partial(
             draw_binary_segmentation_predictions, image_key="image", targets_key="mask"
         )
-    elif configs['data_mode'] == 'multilabel':
-        visualize_predictions = partial(
-            draw_multilabel_segmentation_predictions, image_key="image", targets_key="mask", class_colors=CLASS_COLORS
-        )
+    # elif configs['data_mode'] == 'multilabel':
+    #     visualize_predictions = partial(
+    #         draw_multilabel_segmentation_predictions, image_key="image", targets_key="mask", class_colors=CLASS_COLORS
+    #     )
 
     show_batches_1 = ShowPolarBatchesCallback(
         visualize_predictions, metric="iou", minimize=False)
@@ -281,10 +281,14 @@ def main(configs, seed):
 
     iou_scores = IouCallback(
         input_key="mask",
+        activation="Sigmoid",
+        threshold=0.5
     )
 
     dice_scores = DiceCallback(
         input_key="mask",
+        activation="Sigmoid",
+        threshold=0.5
     )
 
     aucpr_scores = AucPRMetricCallback(
@@ -340,6 +344,7 @@ def main(configs, seed):
         minimize_metric=False,
         timeit=True,
         fp16=fp16_params,
+        resume=configs['resume_path'],
         verbose=True,
     )
 

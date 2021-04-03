@@ -17,7 +17,7 @@ from config import TestConfig
 test_config = TestConfig.get_all_attributes()
 
 gt_dir = Path(test_config['test_mask_paths']) / lesion_dict[test_config['lesion_type']].dir_name
-prob_dir = test_config['out_dir']  + '/tta/' + test_config['lesion_type'] + '/prob_image/Mar28_10_24/' 
+prob_dir = test_config['out_dir']  + '/tta/' + test_config['lesion_type'] + '/prob_image/Apr03_00_57/' 
 figure_dir = test_config['out_dir'] + '/figures/' + test_config['lesion_type'] 
 
 if not os.path.exists(figure_dir):
@@ -67,4 +67,4 @@ fig.add_shape(
 )
 fig.update_yaxes(scaleanchor="x", scaleratio=1)
 fig.update_xaxes(constrain='domain')
-fig.write_image(figure_dir + '/Mar28_10_24.jpg')
+fig.write_image(figure_dir + '/Apr03_00_57.jpg')
