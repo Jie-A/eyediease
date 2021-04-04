@@ -17,7 +17,7 @@ from config import TestConfig
 test_config = TestConfig.get_all_attributes()
 
 gt_dir = Path(test_config['test_mask_paths']) / lesion_dict[test_config['lesion_type']].dir_name
-prob_dir = test_config['out_dir']  + '/tta/' + test_config['lesion_type'] + '/prob_image/Apr03_00_57/' 
+prob_dir = test_config['out_dir']  + '/tta/' + test_config['lesion_type'] + '/prob_image/Apr03_04_10/' 
 figure_dir = test_config['out_dir'] + '/figures/' + test_config['lesion_type'] 
 
 if not os.path.exists(figure_dir):
@@ -36,9 +36,17 @@ for image_path in tqdm(list(gt_dir.glob('*.tif'))):
 
     im_gt = Image.open(str(image_path))
     im_gt = im_gt.resize(im_size)
-
+    
     arr_gt = np.asarray(im_gt)
+
+    if len(arr_gt.shape) == 3:
+        continue
+
+    assert len(arr_gt.shape) == 2
+
     arr_prob = (np.array(im_prob)).astype(float)/255
+
+    assert len(arr_prob.shape) == 2
 
     arr_gts.append(arr_gt)
     arr_probs.append(arr_prob)
@@ -67,4 +75,4 @@ fig.add_shape(
 )
 fig.update_yaxes(scaleanchor="x", scaleratio=1)
 fig.update_xaxes(constrain='domain')
-fig.write_image(figure_dir + '/Apr03_00_57.jpg')
+fig.write_image(figure_dir + '/Apr03_04_10.jpg')

@@ -7,7 +7,7 @@ class BaseConfig:
     train_img_path = '../../data/raw/IDRiD/1. Original Images/a. Training Set'
     train_mask_path = '../../data/raw/IDRiD/2. All Segmentation Groundtruths/a. Training Set/'
     
-    lesion_type = 'HE'
+    lesion_type = 'EX'
     dataset_name = 'IDRiD'
     data_mode = 'binary'
     augmentation = 'medium'
@@ -48,7 +48,7 @@ class BaseConfig:
     scheduler = "cosr"
 
 
-    resume_path = "../../models/HE/Apr02_17_48/checkpoints/best_full.pth"
+    resume_path = None
 
     @classmethod
     def get_all_attributes(cls):
