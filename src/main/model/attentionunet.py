@@ -221,5 +221,36 @@ class Attention_Unet(nn.Module):
             set_trainable([self.initial, self.layer1, self.layer2, self.layer3, self.layer4], False)
 
     def forward(self, x):
+        H, W = x.size(2), x.size(3)
+        x1 = self.layer1(self.initial(x))
+        x2 = self.layer2(x1)
+        x3 = self.layer3(x2)
+        x4 = self.layer4(x3)
         
-        pass
+        x = self.upconv1(self.conv1(x4))
+        x = F.interpolate(x, size=(x3.size(2), x3.size(3)), mode="bilinear", align_corners=True)
+        x = torch.cat([x, x3], dim=1)
+        x = self.upconv2(self.conv2(x))
+
+        x = F.interpolate(x, size=(x2.size(2), x2.size(3)), mode="bilinear", align_corners=True)
+        x = torch.cat([x, x2], dim=1)
+        x = self.upconv3(self.conv3(x))
+
+        x = F.interpolate(x, size=(x1.size(2), x1.size(3)), mode="bilinear", align_corners=True)
+        x = torch.cat([x, x1], dim=1)
+
+        x = self.upconv4(self.conv4(x))
+
+        x = self.upconv5(self.conv5(x))
+
+        # if the input is not divisible by the output stride
+        if x.size(2) != H or x.size(3) != W:
+            x = F.interpolate(x, size=(H, W), mode="bilinear", align_corners=True)
+
+        x = self.conv7(self.conv6(x))
+
+        return x
+
+    def freeze_bn(self):
+        for module in self.modules():
+            if isinstance(module, nn.BatchNorm2d): module.eval()

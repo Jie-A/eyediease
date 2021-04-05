@@ -8,7 +8,6 @@ from sklearn.metrics import average_precision_score, precision_recall_curve, auc
 from pathlib import Path
 from tqdm .auto import tqdm
 import plotly.express as px
-from numba import jit
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -20,20 +19,6 @@ sys.path.append('..')
 
 from util import lesion_dict
 from config import TestConfig
-
-@jit(nopython=True, parallel=True)
-def auc_pr(arr_gts, arr_probs):
-    precision, recall, thresholds = precision_recall_curve(arr_gts, arr_probs)
-    auc_score = auc(recall, precision)
-
-    #https://www.kaggle.com/nicholasgah/optimal-probability-thresholds-using-pr-curve
-    optimal_proba_cutoff = sorted(list(zip(
-        np.abs(precision - recall), thresholds)), key=lambda i: i[0], reverse=False)[0][1]
-
-    logging.info('[INFO] OPTIMAL THRESHOLD: ', optimal_proba_cutoff)
-
-    return precision, recall, auc_score
-
 
 def main(test_config, args):    
     gt_dir = Path(test_config['test_mask_paths']) / lesion_dict[test_config['lesion_type']].dir_name
@@ -71,7 +56,14 @@ def main(test_config, args):
     arr_gts = np.array(arr_gts).reshape(-1)
     arr_probs = np.array(arr_probs).reshape(-1)
 
-    precision, recall, auc_score = auc_pr(arr_gts, arr_probs)
+    precision, recall, thresholds = precision_recall_curve(arr_gts, arr_probs)
+    auc_score = auc(recall, precision)
+
+    #https://www.kaggle.com/nicholasgah/optimal-probability-thresholds-using-pr-curve
+    optimal_proba_cutoff = sorted(list(zip(
+        np.abs(precision - recall), thresholds)), key=lambda i: i[0], reverse=False)[0][1]
+
+    logging.info(f'OPTIMAL THRESHOLD: {optimal_proba_cutoff}')
 
     fig = px.area(
         x=recall, y=precision,
@@ -86,8 +78,6 @@ def main(test_config, args):
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
     fig.update_xaxes(constrain='domain')
     fig.write_image(figure_dir + "/{}.jpg".format(args['exp_name']))
-
-
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()

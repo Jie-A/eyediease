@@ -15,9 +15,6 @@ from PIL import Image
 import cv2
 from tqdm.auto import tqdm
 
-import rasterio
-from rasterio.windows import Window
-
 import sys
 sys.path.append('..')
 
@@ -143,15 +140,16 @@ def tta_patches(config, args):
     ])
 
     for img in tqdm(TEST_IMAGES):
-        dataset = rasterio.open(
-            img.as_posix(), transform=rasterio.Affine(1, 0, 0, 0, 1, 0))
-        slices = make_grid(dataset.shape, window=512, min_overlap=32)
-        preds = np.zeros(dataset.shape, dtype=np.uint8)
+        slices = make_grid((1024, 1024), window=512, min_overlap=32)
+        preds = np.zeros((1024, 1024), dtype=np.uint8)
+        image_all = Image.open(img)
+        image_all = image_all.resize((1024, 1024), resample=Image.BILINEAR)
+        image_arr = np.asarray(image_all).astype(np.uint8)
+        
+        assert image_arr.shape == (1024, 1024, 3)
 
         for (x1, x2, y1, y2) in slices:
-            image = dataset.read([1, 2, 3],
-                                 window=Window.from_slices((x1, x2), (y1, y2)))
-            image = np.moveaxis(image, 0, -1)
+            image = image_arr[x1:x2, y1:y2, ...]
             image = test_transform(image=image)['image']
 
             with torch.no_grad():
@@ -159,6 +157,7 @@ def tta_patches(config, args):
 
                 logit = tta_model(image)[0][0]
                 score_sigmoid = logit.sigmoid().cpu().numpy()
+                # print(np.unique(score_sigmoid, return_counts=True))
                 score_sigmoid = cv2.resize(score_sigmoid, (512, 512))
 
                 if not args['createprob']:
@@ -192,7 +191,7 @@ if __name__ == '__main__':
     parse = argparse.ArgumentParser()
     parse.add_argument('--logdir', required=True,
                        help='Path to where the model checkpoint is saved')
-    parse.add_argument('--createprob', type=bool, default=True,
+    parse.add_argument('--createprob', type=bool, default=False,
                        help='Just create a prob mask not binary')
     parse.add_argument('--optim_thres', type=float, default=0.0,
                        help='The optimal threshold optain from auc-pr curve')
