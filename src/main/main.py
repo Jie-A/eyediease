@@ -27,6 +27,8 @@ from pathlib import Path
 from typing import List
 import os
 import json
+import logging
+logging.basicConfig(level=logging.INFO, format='')
 
 import sys
 sys.path.append('..')
@@ -70,7 +72,8 @@ def get_loader(
     valid_transforms_fn=None,
     preprocessing_fn=None,
     masks: List[Path] = None,
-    mode='binary'
+    mode='binary',
+    data_type = 'tile'
 ):
     indices = np.arange(len(images))
 
@@ -86,14 +89,16 @@ def get_loader(
             np_images[train_indices].tolist(),
             masks=np_masks[train_indices].tolist(),
             transform=train_transforms_fn,
-            preprocessing_fn=preprocessing_fn
+            preprocessing_fn=preprocessing_fn,
+            data_type = data_type
         )
 
         valid_dataset = OneLesionSegmentation(
             np_images[valid_indices].tolist(),
             masks=np_masks[valid_indices].tolist(),
             transform=valid_transforms_fn,
-            preprocessing_fn=preprocessing_fn
+            preprocessing_fn=preprocessing_fn,
+            data_type = data_type
         )
     else:
         train_dataset = MultiLesionSegmentation(
@@ -180,7 +185,8 @@ def main(configs, seed):
         train_transforms_fn=train_transform,
         valid_transforms_fn=val_transform,
         preprocessing_fn=preprocessing,
-        mode=configs['data_mode']
+        mode=configs['data_mode'],
+        data_type=configs['data_type']
     )
 
     #Visualize on terminal
@@ -195,7 +201,7 @@ def main(configs, seed):
         #Disable batchnorm update
         for m in model.encoder.modules():
             if isinstance(m, bn_types):
-                m.track_running_stats = False
+                m.eval()
 
 
     encoder_params = filter(lambda p: p.requires_grad, model.encoder.parameters())
@@ -211,7 +217,7 @@ def main(configs, seed):
         # parameters = add_weight_decay.add_weight_decay(
         #     model, weight_decay=configs['weight_decay'])
 
-    print(
+    logging.info(
         f'[INFO] total and trainable parameters in the model {count_parameters(model)}')
     
     

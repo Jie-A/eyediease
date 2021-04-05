@@ -21,6 +21,12 @@ ttach = "==0.0.3"
 Pillow = "==8.1.2"
 wandb = "*"
 plotly = "*"
+rasterio = "*"
+ipython = "*"
+ipykernel = "*"
+tree = "*"
+tensorboard = "*"
+numba = "*"
 
 [dev-packages]
 autopep8 = "*"

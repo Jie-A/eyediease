@@ -1,4 +1,5 @@
 from PIL import Image
+from numba.np.ufunc import parallel
 import numpy as np
 import os
 import re
@@ -7,6 +8,12 @@ from sklearn.metrics import average_precision_score, precision_recall_curve, auc
 from pathlib import Path
 from tqdm .auto import tqdm
 import plotly.express as px
+from numba import jit
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+import argparse
 
 import sys
 sys.path.append('..')
@@ -14,65 +21,78 @@ sys.path.append('..')
 from util import lesion_dict
 from config import TestConfig
 
-test_config = TestConfig.get_all_attributes()
+@jit(nopython=True, parallel=True)
+def auc_pr(arr_gts, arr_probs):
+    precision, recall, thresholds = precision_recall_curve(arr_gts, arr_probs)
+    auc_score = auc(recall, precision)
 
-gt_dir = Path(test_config['test_mask_paths']) / lesion_dict[test_config['lesion_type']].dir_name
-prob_dir = test_config['out_dir']  + '/tta/' + test_config['lesion_type'] + '/prob_image/Apr03_04_10/' 
-figure_dir = test_config['out_dir'] + '/figures/' + test_config['lesion_type'] 
+    #https://www.kaggle.com/nicholasgah/optimal-probability-thresholds-using-pr-curve
+    optimal_proba_cutoff = sorted(list(zip(
+        np.abs(precision - recall), thresholds)), key=lambda i: i[0], reverse=False)[0][1]
 
-if not os.path.exists(figure_dir):
-    os.makedirs(figure_dir)
+    logging.info('[INFO] OPTIMAL THRESHOLD: ', optimal_proba_cutoff)
 
-i = 0
-sum_pav = 0
+    return precision, recall, auc_score
 
-arr_gts = []
-arr_probs = []
 
-for image_path in tqdm(list(gt_dir.glob('*.tif'))):
-    prob_name = re.sub('_' + test_config['lesion_type']+ '.tif', '.jpg', image_path.name)
-    im_prob = Image.open(prob_dir+prob_name)
-    im_size = im_prob.size
+def main(test_config, args):    
+    gt_dir = Path(test_config['test_mask_paths']) / lesion_dict[test_config['lesion_type']].dir_name
+    prob_dir = os.path.join(test_config['out_dir'], 'tta', test_config['lesion_type'], 'prob_image', args['exp_name']) 
+    figure_dir = os.path.join(test_config['out_dir'], 'figures', test_config['lesion_type']) 
 
-    im_gt = Image.open(str(image_path))
-    im_gt = im_gt.resize(im_size)
-    
-    arr_gt = np.asarray(im_gt)
+    if not os.path.exists(figure_dir):
+        os.makedirs(figure_dir)
 
-    if len(arr_gt.shape) == 3:
-        continue
+    arr_gts = []
+    arr_probs = []
 
-    assert len(arr_gt.shape) == 2
+    for image_path in tqdm(list(gt_dir.glob('*.tif'))):
+        prob_name = re.sub('_' + test_config['lesion_type']+ '.tif', '.jpg', image_path.name)
+        im_prob = Image.open(os.path.join(prob_dir,prob_name))
+        im_size = im_prob.size
 
-    arr_prob = (np.array(im_prob)).astype(float)/255
+        im_gt = Image.open(str(image_path))
+        im_gt = im_gt.resize(im_size)
+        
+        arr_gt = np.asarray(im_gt)
 
-    assert len(arr_prob.shape) == 2
+        if len(arr_gt.shape) == 3:
+            continue
 
-    arr_gts.append(arr_gt)
-    arr_probs.append(arr_prob)
+        assert len(arr_gt.shape) == 2
 
-arr_gts = np.array(arr_gts).reshape(-1)
-arr_probs = np.array(arr_probs).reshape(-1)
+        arr_prob = (np.array(im_prob)).astype(float)/255
 
-precision, recall, thresholds = precision_recall_curve(arr_gts, arr_probs)
-auc_score = auc(recall, precision)
+        assert len(arr_prob.shape) == 2
 
-#https://www.kaggle.com/nicholasgah/optimal-probability-thresholds-using-pr-curve
-optimal_proba_cutoff = sorted(list(zip(
-    np.abs(precision - recall), thresholds)), key=lambda i: i[0], reverse=False)[0][1]
+        arr_gts.append(arr_gt)
+        arr_probs.append(arr_prob)
 
-print(f'[INFO] OPTIMAL THRESHOLD: {optimal_proba_cutoff}')
+    arr_gts = np.array(arr_gts).reshape(-1)
+    arr_probs = np.array(arr_probs).reshape(-1)
 
-fig = px.area(
-    x=recall, y=precision,
-    title=f'Precision-Recall Curve (AUC={auc_score:.4f})',
-    labels=dict(x='Recall', y='Precision'),
-    width=700, height=500
-)
-fig.add_shape(
-    type='line', line=dict(dash='dash'),
-    x0=0, x1=1, y0=1, y1=0
-)
-fig.update_yaxes(scaleanchor="x", scaleratio=1)
-fig.update_xaxes(constrain='domain')
-fig.write_image(figure_dir + '/Apr03_04_10.jpg')
+    precision, recall, auc_score = auc_pr(arr_gts, arr_probs)
+
+    fig = px.area(
+        x=recall, y=precision,
+        title='Precision-Recall Curve (AUC={:.4f})'.format(auc_score),
+        labels=dict(x='Recall', y='Precision'),
+        width=700, height=500
+    )
+    fig.add_shape(
+        type='line', line=dict(dash='dash'),
+        x0=0, x1=1, y0=1, y1=0
+    )
+    fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    fig.update_xaxes(constrain='domain')
+    fig.write_image(figure_dir + "/{}.jpg".format(args['exp_name']))
+
+
+
+if __name__ == '__main__':
+    parse = argparse.ArgumentParser()
+    parse.add_argument('--exp_name', required=True, help='Name of the experiment')
+    args = vars(parse.parse_args())
+    test_config = TestConfig.get_all_attributes()
+
+    main(test_config, args)

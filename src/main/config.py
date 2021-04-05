@@ -11,14 +11,14 @@ class BaseConfig:
     dataset_name = 'IDRiD'
     data_mode = 'binary'
     augmentation = 'medium'
-    scale_size = 1024
-    input_format = 'all'  #2 type of input format : all image or patches
+    scale_size = 256
+    data_type = 'tile'  #2 type of input format : all image or patches
 
     #Final
     finetune = False  # Traning only decoder
     num_epochs = 60
-    batch_size = 2
-    val_batch_size = 2
+    batch_size = 8
+    val_batch_size = 8
     learning_rate = 1e-5
     learning_rate_decode = 1e-3
     weight_decay = 1e-5
@@ -43,12 +43,13 @@ class BaseConfig:
     # https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou
     # Should we use IOU loss instead of Dice loss in this case ?
     criterion = {"wbce": 1.0, "dice": 1.0}
+    deep_supervision = False
     pos_weights = [200]
     optimizer = "diffgrad"
     scheduler = "cosr"
 
 
-    resume_path = None
+    resume_path = "../../models/EX/Apr04_15_51/checkpoints/best_full.pth"
 
     @classmethod
     def get_all_attributes(cls):

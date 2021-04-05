@@ -12,7 +12,14 @@ import numpy as np
 from iglovikov_helper_functions.utils.image_utils import pad
 from collections import OrderedDict
 import cv2
+from tqdm.auto import tqdm
 
+import rasterio
+from rasterio.windows import Window
+
+import sys
+sys.path.append('../main/')
+from util import make_grid
 
 __all__ = ['CLASS_NAMES', 'CLASS_COLORS', 'OneLesionSegmentation',
            'MultiLesionSegmentation', 'TestSegmentation']
@@ -39,22 +46,60 @@ lesion_paths = {
     'SE': '4. Soft Exudates'
 }
 
-
 class OneLesionSegmentation(Dataset):
-    def __init__(self, images: List[Path], masks: List[Path] = None, transform=None, preprocessing_fn=None):
+    def __init__(self, images: List[Path], masks: List[Path] = None, transform=None, preprocessing_fn=None, data_type = 'all'):
         self.images = images
-        self.masks = masks
+        self.mask_paths = masks
         self.transform = transform
         self.preprocessing_fn = preprocessing_fn
+        self.mode = data_type
+        self.len = len(images)
+        if data_type == 'tile':
+            self.window = 512
+            self.overlap = 32
+            self.threshold = 10
+            self.identity = rasterio.Affine(1, 0, 0, 0, 1, 0)
+            self.x, self.y, self.tile_id = [], [], []
+            self.build_slide()
+            self.len = len(self.x)
 
     def __len__(self):
-        return len(self.images)
+        return self.len
+
+    def build_slide(self):
+        self.masks = []
+        self.files = []
+        self.slices = []
+        for i, img_path in enumerate(self.images):
+            self.files.append(img_path)
+            
+            with rasterio.open(img_path, transform = self.identity) as dataset:
+                mask = mask_read(self.mask_paths[i]).astype(np.float32)
+                self.masks.append(mask)
+                slices = make_grid(dataset.shape, window=self.window, min_overlap=self.overlap)
+                
+                for j, slc in tqdm(enumerate(slices)):
+                    x1,x2,y1,y2 = slc
+                    if self.masks[-1][x1:x2,y1:y2].sum() > self.threshold:
+                        self.slices.append([i,x1,x2,y1,y2])
+                        
+                        image = dataset.read([1,2,3],
+                            window=Window.from_slices((x1,x2),(y1,y2)))
+                        
+                        image = np.moveaxis(image, 0, -1)
+                        self.x.append(image)
+                        self.y.append(self.masks[-1][x1:x2,y1:y2])
+                        self.tile_id.append(img_path.name + '_tile_' + str(j))
 
     def __getitem__(self, index: int) -> dict:
-        image_path = self.images[index]
-
-        image = cata_image.imread(image_path)
-        mask = mask_read(self.masks[index]).astype(np.float32)
+        if self.mode == 'all':
+            image_path = self.images[index]
+            image = cata_image.imread(image_path)
+            mask = mask_read(self.masks[index]).astype(np.float32)
+            image_id = fs.id_from_fname(image_path)
+        else:
+            image, mask = self.x[index], self.y[index]
+            image_id = self.tile_id[index]
 
         if self.transform is not None:
             results = self.transform(image=image, mask=mask)
@@ -66,7 +111,6 @@ class OneLesionSegmentation(Dataset):
 
         image = image_to_tensor(image).float()
         mask = image_to_tensor(mask, dummy_channels_dim=True).float()
-        image_id = fs.id_from_fname(image_path)
 
         return {
             'image': image,
