@@ -1,4 +1,5 @@
 import argparse
+from albumentations.augmentations.transforms import Lambda
 import torch
 from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
@@ -25,6 +26,7 @@ from config import TestConfig
 from data import EasyTransform
 from data import TestSegmentation
 from util import make_grid, save_output as so
+import models
 
 def get_model(params, model_name):
     # Model return logit values
@@ -127,8 +129,22 @@ def tta_patches(config, args):
     TEST_IMAGES = sorted(test_img_dir.glob("*.jpg"))
     # TEST_IMAGES = [path for path in TEST_IMAGES if int(path.name.split('_')[1].split('.')[0]) > 67]
 
-    model = get_model(
-        model_name=config['model_name'], params=config['model_params'])
+    use_smp = True
+    if hasattr(smp, config['model_name']):
+        model, preprocessing_fn = get_model(
+            config['model_params'], config['model_name'])
+    elif config['model_name'] == "TransUnet":
+        from self_attention_cv.transunet import TransUnet
+
+        model = TransUnet(**config['model_params'])
+        preprocessing_fn = models.get_preprocessing_fn(pretrained=None)
+        use_smp=False
+    else:
+        model, preprocessing_fn = models.get_model(
+            model_name=config['model_name'], 
+            params = config['model_params'])
+
+        use_smp = False
 
     checkpoints = torch.load(f"{args['logdir']}/checkpoints/best.pth")
     model.load_state_dict(checkpoints['model_state_dict'])
@@ -140,7 +156,7 @@ def tta_patches(config, args):
 
     test_transform = A.Compose([
         A.Resize(256, 256),
-        A.Normalize(),
+        A.Lambda(image = preprocessing_fn),
         ToTensorV2()
     ])
 
@@ -153,7 +169,8 @@ def tta_patches(config, args):
                 image = dataset.read([1,2,3], window = Window.from_slices((x1, x2), (y1, y2)))
                 image = np.moveaxis(image, 0, -1)
                 image = test_transform(image=image)['image']
-
+                image = image.float()
+                
                 with torch.no_grad():
                     image = image.to(utils.get_device())[None]
 

@@ -41,7 +41,9 @@ from optim import get_optimizer
 from losses import get_loss, WeightedBCEWithLogits
 from config import BaseConfig
 from data import OneLesionSegmentation, MultiLesionSegmentation, CLASS_COLORS, CLASS_NAMES
-from model import *
+import models
+
+torch.autograd.set_detect_anomaly(True)
 
 def get_model(params, model_name):
     
@@ -58,11 +60,6 @@ def get_model(params, model_name):
             params['encoder_name'], params['encoder_weights'])
 
     return model, preprocessing_fn
-
-def get_model_2(model_name):
-    
-    pass
-
 
 def get_loader(
     images: List[Path],
@@ -152,8 +149,28 @@ def main(configs, seed):
     TRAIN_MASK_DIRS = Path(configs['train_mask_path'])
 
     # Get model
-    model, preprocessing_fn = get_model(
-        configs['model_params'], configs['model_name'])
+    use_smp = True
+    if hasattr(smp, configs['model_name']):
+        model, preprocessing_fn = get_model(
+            configs['model_params'], configs['model_name'])
+    elif configs['model_name'] == "TransUnet":
+        from self_attention_cv.transunet import TransUnet
+        # from self_attention_cv.vit import ResNet50ViT
+
+        # configs['model_params']['vit_transformer'] = ResNet50ViT(
+        #     classification=False,
+        #     pretrained_resnet=True,
+
+        # )
+        model = TransUnet(**configs['model_params'])
+        preprocessing_fn = models.get_preprocessing_fn(pretrained=None)
+        use_smp=False
+    else:
+        model, preprocessing_fn = models.get_model(
+            model_name=configs['model_name'], 
+            params = configs['model_params'])
+
+        use_smp = False
 
     #Define transform (augemntation)
     transforms = Transform(
@@ -197,25 +214,30 @@ def main(configs, seed):
     util.log_pretty_table(log_info[0], log_info[1])
 
     if configs['finetune']:
-        #Free all weights in the encoder of model
-        bn_types = nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.SyncBatchNorm
-        for param in model.encoder.parameters():
-            param.requires_grad = False
+        if use_smp:
+            #Free all weights in the encoder of model
+            bn_types = nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.SyncBatchNorm
+            for param in model.encoder.parameters():
+                param.requires_grad = False
 
-        #Disable batchnorm update
-        for m in model.encoder.modules():
-            if isinstance(m, bn_types):
-                m.eval()
+            #Disable batchnorm update
+            for m in model.encoder.modules():
+                if isinstance(m, bn_types):
+                    m.eval()
 
+    param_group = []
+    if hasattr(model, 'encoder'):
+        encoder_params = filter(lambda p: p.requires_grad, model.encoder.parameters())
+        param_group += [{'params': encoder_params, 'lr': configs['learning_rate']}]        
+    if hasattr(model, 'decoder'):
+        decoder_params = filter(lambda p: p.requires_grad, model.decoder.parameters())
+        param_group += [{'params': decoder_params}]        
+    if hasattr(model, 'head'):
+        head_params = filter(lambda p: p.requires_grad, model.head.parameters())
+        param_group += [{'params': head_params}]        
 
-    encoder_params = filter(lambda p: p.requires_grad, model.encoder.parameters())
-    decoder_params = filter(lambda p: p.requires_grad, model.decoder.parameters())
-
-    param_group = [
-        {'params': encoder_params, 'lr': configs['learning_rate']},
-        {'params': decoder_params}
-    ]
-
+    if len(param_group) == 0:
+        param_group = [{'params': filter(lambda p: p.requires_grad, model.parameters())}]
         # #Define training configurations
         # #Dont set weight decay for batchnorm
         # parameters = add_weight_decay.add_weight_decay(

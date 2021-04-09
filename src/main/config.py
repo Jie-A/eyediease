@@ -19,20 +19,19 @@ class BaseConfig:
     num_epochs = 60
     batch_size = 8
     val_batch_size = 8
-    learning_rate = 1e-5
-    learning_rate_decode = 1e-3
+    learning_rate = 1e-3
+    learning_rate_decode = 1e-4
     weight_decay = 1e-5
     is_fp16 = True
 
     #first
-    model_name = "UnetPlusPlus"
+    model_name = "TransUnet"
     model_params = {
-        "encoder_name": 'efficientnet-b2',
-        "encoder_depth": 5,
-        "encoder_weights": "imagenet",
-        "decoder_use_batchnorm": True,
-        "decoder_attention_type": "scse",
-        "classes": 1
+        "in_channels": 3,
+        "img_dim": scale_size,
+        "classes": 1,
+        "vit_blocks":4,
+        "vit_dim_linear_mhsa_block":512
     }
 
     #Choose at first and no need to change

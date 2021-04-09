@@ -27,6 +27,7 @@ ipykernel = "*"
 tree = "*"
 tensorboard = "*"
 numba = "*"
+self-attention-cv = "*"
 
 [dev-packages]
 autopep8 = "*"
