@@ -7,7 +7,7 @@ class BaseConfig:
     train_img_path = '../../data/raw/IDRiD/1. Original Images/a. Training Set'
     train_mask_path = '../../data/raw/IDRiD/2. All Segmentation Groundtruths/a. Training Set/'
     
-    lesion_type = 'SE'
+    lesion_type = 'EX'
     dataset_name = 'IDRiD'
     data_mode = 'binary'
     augmentation = 'medium'
@@ -20,18 +20,19 @@ class BaseConfig:
     batch_size = 8
     val_batch_size = 8
     learning_rate = 1e-3
-    learning_rate_decode = 1e-4
+    learning_rate_decode = 1e-5
     weight_decay = 1e-5
     is_fp16 = True
 
     #first
-    model_name = "TransUnet"
+    model_name = "UnetPlusPlus"
     model_params = {
-        "in_channels": 3,
-        "img_dim": scale_size,
-        "classes": 1,
-        "vit_blocks":4,
-        "vit_dim_linear_mhsa_block":512
+        "encoder_name": "efficientnet-b2", 
+        "encoder_depth": 5, 
+        "encoder_weights": "imagenet", 
+        "decoder_use_batchnorm": True, 
+        "decoder_attention_type": "scse", 
+        "classes": 1
     }
 
     #Choose at first and no need to change

@@ -6,12 +6,12 @@ from torch.utils.data.dataloader import default_collate
 from typing import List
 from pathlib import Path
 from pytorch_toolbelt.utils import fs, image_to_tensor
-from skimage.io import imread as mask_read
 from catalyst.contrib.utils.cv import image as cata_image
 import numpy as np
 from iglovikov_helper_functions.utils.image_utils import pad
 from collections import OrderedDict
 import cv2
+from PIL import Image
 from tqdm.auto import tqdm
 
 import rasterio
@@ -74,7 +74,8 @@ class OneLesionSegmentation(Dataset):
             self.files.append(img_path)
             
             with rasterio.open(img_path, transform = self.identity) as dataset:
-                mask = mask_read(self.mask_paths[i]).astype(np.float32)
+                mask = Image.open(self.mask_paths[i])
+                mask = np.asarray(mask).astype(np.float32)
                 self.masks.append(mask)
                 slices = make_grid(dataset.shape, window=self.window, min_overlap=self.overlap)
                 
@@ -95,7 +96,8 @@ class OneLesionSegmentation(Dataset):
         if self.mode == 'all':
             image_path = self.images[index]
             image = cata_image.imread(image_path)
-            mask = mask_read(self.masks[index]).astype(np.float32)
+            mask = Image.open(self.masks[index])
+            mask = np.asarray(mask).astype(np.float32)
             image_id = fs.id_from_fname(image_path)
         else:
             image, mask = self.x[index], self.y[index]

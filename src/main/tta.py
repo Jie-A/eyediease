@@ -30,11 +30,13 @@ import models
 
 def get_model(params, model_name):
     # Model return logit values
-    params['encoder_weights'] = None
     model = getattr(smp, model_name)(
         **params
     )
-    return model
+
+    preprocessing_fn = smp.encoders.get_preprocessing_fn(params['encoder_name'], params['encoder_weights'])
+    
+    return model, preprocessing_fn
 
 def str_2_bool(value: str):
     return True if value == 'true' else False
@@ -129,7 +131,6 @@ def tta_patches(config, args):
     TEST_IMAGES = sorted(test_img_dir.glob("*.jpg"))
     # TEST_IMAGES = [path for path in TEST_IMAGES if int(path.name.split('_')[1].split('.')[0]) > 67]
 
-    use_smp = True
     if hasattr(smp, config['model_name']):
         model, preprocessing_fn = get_model(
             config['model_params'], config['model_name'])
@@ -138,13 +139,10 @@ def tta_patches(config, args):
 
         model = TransUnet(**config['model_params'])
         preprocessing_fn = models.get_preprocessing_fn(pretrained=None)
-        use_smp=False
     else:
         model, preprocessing_fn = models.get_model(
             model_name=config['model_name'], 
             params = config['model_params'])
-
-        use_smp = False
 
     checkpoints = torch.load(f"{args['logdir']}/checkpoints/best.pth")
     model.load_state_dict(checkpoints['model_state_dict'])
