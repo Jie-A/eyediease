@@ -34,12 +34,13 @@ def main(test_config, args):
     for image_path in tqdm(list(gt_dir.glob('*.tif'))):
         prob_name = re.sub('_' + test_config['lesion_type']+ '.tif', '.jpg', image_path.name)
         im_prob = Image.open(os.path.join(prob_dir,prob_name))
+        im_prob = im_prob.resize((1024, 1024))
         im_size = im_prob.size
 
         im_gt = Image.open(str(image_path))
-        im_gt = im_gt.resize(im_size)
+        im_gt = im_gt.resize((1024, 1024))
         
-        arr_gt = np.asarray(im_gt)
+        arr_gt = np.asarray(im_gt).astype(np.uint8)
 
         if len(arr_gt.shape) == 3:
             continue

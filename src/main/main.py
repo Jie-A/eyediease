@@ -41,7 +41,7 @@ from optim import get_optimizer
 from losses import get_loss, WeightedBCEWithLogits
 from config import BaseConfig
 from data import OneLesionSegmentation, MultiLesionSegmentation, CLASS_COLORS, CLASS_NAMES
-
+from model import *
 
 def get_model(params, model_name):
     
@@ -58,6 +58,10 @@ def get_model(params, model_name):
             params['encoder_name'], params['encoder_weights'])
 
     return model, preprocessing_fn
+
+def get_model_2(model_name):
+    
+    pass
 
 
 def get_loader(
@@ -279,8 +283,8 @@ def main(configs, seed):
     show_batches_1 = ShowPolarBatchesCallback(
         visualize_predictions, metric="iou", minimize=False)
 
-    show_batches_2 = ShowPolarBatchesCallback(
-        visualize_predictions, metric="loss", minimize=True)
+    # show_batches_2 = ShowPolarBatchesCallback(
+    #     visualize_predictions, metric="loss", minimize=True)
 
     early_stopping = EarlyStoppingCallback(
         patience=10, metric=configs['metric'], minimize=False)
@@ -301,9 +305,9 @@ def main(configs, seed):
         input_key="mask",
     )
 
-    aucroc_scores = RocAucMetricCallback(
-        input_key="mask",
-    )
+    # aucroc_scores = RocAucMetricCallback(
+    #     input_key="mask",
+    # )
     #End define
 
     current_time = datetime.now().strftime("%b%d_%H_%M")
@@ -318,7 +322,7 @@ def main(configs, seed):
         json.dump(configs, f)
 
     callbacks += [hyper_callbacks, early_stopping,
-                  iou_scores, dice_scores, aucpr_scores, aucroc_scores, show_batches_1, show_batches_2, logger]
+                  iou_scores, dice_scores, aucpr_scores, show_batches_1, logger]
 
     
     # class CustomRunner(dl.SupervisedRunner):
@@ -356,7 +360,7 @@ def main(configs, seed):
 
 
 if __name__ == "__main__":
-    os.environ['CUDA_VISIBLE_DEVICES']='0,1,2,3'
+    os.environ['CUDA_VISIBLE_DEVICES']='0'
 
     SEED = 1999
     set_manual_seed(SEED)

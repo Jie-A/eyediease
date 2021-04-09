@@ -7,12 +7,12 @@ class BaseConfig:
     train_img_path = '../../data/raw/IDRiD/1. Original Images/a. Training Set'
     train_mask_path = '../../data/raw/IDRiD/2. All Segmentation Groundtruths/a. Training Set/'
     
-    lesion_type = 'EX'
+    lesion_type = 'SE'
     dataset_name = 'IDRiD'
     data_mode = 'binary'
     augmentation = 'medium'
     scale_size = 256
-    data_type = 'tile'  #2 type of input format : all image or patches
+    data_type = 'tile'  #2 type of input format : whole image or patches
 
     #Final
     finetune = False  # Traning only decoder
@@ -42,14 +42,13 @@ class BaseConfig:
     #Second
     # https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou
     # Should we use IOU loss instead of Dice loss in this case ?
-    criterion = {"wbce": 1.0, "dice": 1.0}
+    criterion = {"bce": 0.8, "log_dice": 0.2}
     deep_supervision = False
     pos_weights = [200]
-    optimizer = "diffgrad"
-    scheduler = "cosr"
+    optimizer = "adamw"
+    scheduler = "reduce"
 
-
-    resume_path = "../../models/EX/Apr04_15_51/checkpoints/best_full.pth"
+    resume_path = None
 
     @classmethod
     def get_all_attributes(cls):

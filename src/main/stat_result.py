@@ -24,10 +24,10 @@ transform = A.Compose([
 	A.PadIfNeeded(test_config['scale_size'], test_config['scale_size'], border_mode=cv2.BORDER_CONSTANT, value=0)]
 	)
 
-test_size=27
 gt_dir = test_config['test_mask_paths'] + \
 	'/' + lesion_dict[test_config['lesion_type']].dir_name
 
+test_size=len(os.listdir(gt_dir))
 pred_dir = test_config['out_dir'] + '/' + 'tta/' + args['dir']
 
 sn = np.empty(test_size+1, dtype=float) 
@@ -42,10 +42,13 @@ for image_path in os.listdir(gt_dir):
 	image_paths[i] = image_path
 	im_gt = Image.open(gt_dir+'/'+image_path)
 	arr_gt = np.array(im_gt)
-	arr_gt = transform(image = arr_gt)['image']
+	if test_config['data_type'] == 'all':
+		arr_gt = transform(image = arr_gt)['image']
 
 	pred_image_path = re.sub('_' + test_config['lesion_type'] + '.tif', '.jpg', image_path)
 	im_pred = Image.open(pred_dir+'/'+pred_image_path)
+	if im_pred is None:
+		continue
 	im_binary = im_pred.convert('1')
 	arr_pred = np.asarray(im_binary).astype(np.uint8)
 
@@ -57,7 +60,10 @@ for image_path in os.listdir(gt_dir):
 	pred_p = np.sum(arr_pred)
 	
 	false_p = pred_p - true_p
-	actual_n = test_config['scale_size']*test_config['scale_size'] - actual_p
+	if test_config['data_type'] == 'all':
+		actual_n = test_config['scale_size']*test_config['scale_size'] - actual_p
+	else:
+		actual_n = im_gt.size[0]*im_gt.size[1] - actual_p
 	true_n = actual_n - false_p
 
 	union = actual_p + false_p

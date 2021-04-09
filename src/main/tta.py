@@ -15,6 +15,9 @@ from PIL import Image
 import cv2
 from tqdm.auto import tqdm
 
+import rasterio
+from rasterio.windows import Window
+
 import sys
 sys.path.append('..')
 
@@ -29,9 +32,10 @@ def get_model(params, model_name):
     model = getattr(smp, model_name)(
         **params
     )
-
     return model
 
+def str_2_bool(value: str):
+    return True if value == 'true' else False
 
 def test_tta(config, args):
     test_img_dir = Path(config['test_img_paths'])
@@ -121,6 +125,7 @@ def test_tta(config, args):
 def tta_patches(config, args):
     test_img_dir = Path(config['test_img_paths'])
     TEST_IMAGES = sorted(test_img_dir.glob("*.jpg"))
+    # TEST_IMAGES = [path for path in TEST_IMAGES if int(path.name.split('_')[1].split('.')[0]) > 67]
 
     model = get_model(
         model_name=config['model_name'], params=config['model_params'])
@@ -140,58 +145,56 @@ def tta_patches(config, args):
     ])
 
     for img in tqdm(TEST_IMAGES):
-        slices = make_grid((1024, 1024), window=512, min_overlap=32)
-        preds = np.zeros((1024, 1024), dtype=np.uint8)
-        image_all = Image.open(img)
-        image_all = image_all.resize((1024, 1024), resample=Image.BILINEAR)
-        image_arr = np.asarray(image_all).astype(np.uint8)
-        
-        assert image_arr.shape == (1024, 1024, 3)
+        with rasterio.open(img.as_posix(), transform=rasterio.Affine(1, 0, 0, 0, 1, 0)) as dataset:
+            slices = make_grid(dataset.shape, window=512, min_overlap=32)
+            preds = np.zeros(dataset.shape, dtype=np.float32)
 
-        for (x1, x2, y1, y2) in slices:
-            image = image_arr[x1:x2, y1:y2, ...]
-            image = test_transform(image=image)['image']
+            for (x1, x2, y1, y2) in slices:
+                image = dataset.read([1,2,3], window = Window.from_slices((x1, x2), (y1, y2)))
+                image = np.moveaxis(image, 0, -1)
+                image = test_transform(image=image)['image']
 
-            with torch.no_grad():
-                image = image.to(utils.get_device())[None]
+                with torch.no_grad():
+                    image = image.to(utils.get_device())[None]
 
-                logit = tta_model(image)[0][0]
-                score_sigmoid = logit.sigmoid().cpu().numpy()
-                # print(np.unique(score_sigmoid, return_counts=True))
-                score_sigmoid = cv2.resize(score_sigmoid, (512, 512))
+                    logit = tta_model(image)[0][0]
+                    score_sigmoid = logit.sigmoid().cpu().numpy()
+                    # print(np.unique(score_sigmoid, return_counts=True))
+                    score_sigmoid = cv2.resize(score_sigmoid, (512, 512))
 
-                if not args['createprob']:
-                    preds[x1:x2, y1:y2] = (score_sigmoid > args['optim_thres'])
-                else:
-                    preds[x1:x2, y1:y2] = (score_sigmoid)
+                    if not str_2_bool(args['createprob']):
+                        preds[x1:x2, y1:y2] = (score_sigmoid > args['optim_thres'])
+                    else:
+                        preds[x1:x2, y1:y2] = (score_sigmoid)
 
-        if args['createprob']:
-            out_path = Path(config['out_dir']) / 'tta' / \
-                config['lesion_type'] / 'prob_image' / \
-                Path(args['logdir']).name
-            if not os.path.isdir(out_path):
-                os.makedirs(out_path, exist_ok=True)
+            if str_2_bool(args['createprob']):
+                out_path = Path(config['out_dir']) / 'tta' / \
+                    config['lesion_type'] / 'prob_image' / \
+                    Path(args['logdir']).name
+                if not os.path.isdir(out_path):
+                    os.makedirs(out_path, exist_ok=True)
 
-            out_name = out_path / img.name
+                out_name = out_path / img.name
 
-            predicted_save = Image.fromarray(
-                (preds*255).astype('uint8'))
-            predicted_save.save(out_name, "JPEG", quality=100)
-        else:
-            out_path = Path(config['out_dir']) / 'tta' / \
-                config['lesion_type'] / Path(args['logdir']).name
-            if not os.path.isdir(out_path):
-                os.makedirs(out_path, exist_ok=True)
+                predicted_save = Image.fromarray(
+                    (preds*255).astype('uint8'))
+                predicted_save.save(out_name, "JPEG", quality=100)
+                print(f'Saved {img.name} to {str(out_path)}')
+            else:
+                out_path = Path(config['out_dir']) / 'tta' / \
+                    config['lesion_type'] / Path(args['logdir']).name
+                if not os.path.isdir(out_path):
+                    os.makedirs(out_path, exist_ok=True)
 
-            out_name = out_path / img.name
-            so(preds, out_name)  # PIL Image format
+                out_name = out_path / img.name
+                so(preds, out_name)  # PIL Image format
 
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
     parse.add_argument('--logdir', required=True,
                        help='Path to where the model checkpoint is saved')
-    parse.add_argument('--createprob', type=bool, default=False,
+    parse.add_argument('--createprob', type=str, default='false',
                        help='Just create a prob mask not binary')
     parse.add_argument('--optim_thres', type=float, default=0.0,
                        help='The optimal threshold optain from auc-pr curve')
