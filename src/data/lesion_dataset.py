@@ -29,7 +29,8 @@ CLASS_NAMES = [
     'MA',
     'EX',
     'HE',
-    'SE'
+    'SE',
+    'OD'
 ]
 
 CLASS_COLORS = [
@@ -43,7 +44,8 @@ lesion_paths = {
     'MA': '1. Microaneurysms',
     'EX': '3. Hard Exudates',
     'HE': '2. Haemorrhages',
-    'SE': '4. Soft Exudates'
+    'SE': '4. Soft Exudates',
+    'OD': '5. Optic Disc'
 }
 
 class OneLesionSegmentation(Dataset):
@@ -96,7 +98,7 @@ class OneLesionSegmentation(Dataset):
         if self.mode == 'all':
             image_path = self.images[index]
             image = cata_image.imread(image_path)
-            mask = Image.open(self.masks[index])
+            mask = Image.open(self.mask_paths[index])
             mask = np.asarray(mask).astype(np.float32)
             image_id = fs.id_from_fname(image_path)
         else:
@@ -114,6 +116,7 @@ class OneLesionSegmentation(Dataset):
         image = image_to_tensor(image).float()
         mask = image_to_tensor(mask, dummy_channels_dim=True).float()
 
+        assert mask.shape[:1] == torch.Size([1]) and len(mask.shape) == 3, f'Mask shape is {mask.shape}'
         return {
             'image': image,
             'mask': mask,
@@ -188,7 +191,9 @@ class TestSegmentation(Dataset):
 
         if self.transform is not None:
             transformed = self.transform(**result)
-            result['image'] = transformed['image']
+            image = transformed['image']
+            image = image.float()
+            result['image'] = image
             if self.masks is not None:
                 result['mask'] = transformed['mask']
 

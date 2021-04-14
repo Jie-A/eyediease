@@ -34,7 +34,9 @@ def get_model(params, model_name):
         **params
     )
 
-    preprocessing_fn = smp.encoders.get_preprocessing_fn(params['encoder_name'], params['encoder_weights'])
+    preprocessing_fn = smp.encoders.get_preprocessing_fn(
+        params['encoder_name'], 
+        params['encoder_weights'])
     
     return model, preprocessing_fn
 
@@ -46,12 +48,23 @@ def test_tta(config, args):
     TEST_IMAGES = sorted(test_img_dir.glob("*.jpg"))
 
     # Model return logit values
-    model = get_model(
-        model_name=config['model_name'], params=config['model_params'])
+    if hasattr(smp, config['model_name']):
+        model, preprocessing_fn = get_model(
+            config['model_params'], config['model_name'])
+    elif config['model_name'] == "TransUnet":
+        from self_attention_cv.transunet import TransUnet
 
-    transform = EasyTransform(1024)
+        model = TransUnet(**config['model_params'])
+        preprocessing_fn = models.get_preprocessing_fn(pretrained=None)
+    else:
+        model, preprocessing_fn = models.get_model(
+            model_name=config['model_name'], 
+            params = config['model_params'])
+
+    transform = EasyTransform(config['scale_size'])
     augmentation = transform.resize_transforms() + \
-        [A.Normalize(), ToTensorV2()]
+        [A.Lambda(image=preprocessing_fn), ToTensorV2()]
+
     test_transform = A.Compose(augmentation)
 
     # create test dataset
@@ -70,8 +83,9 @@ def test_tta(config, args):
         pin_memory=True
     )
 
-    checkpoints = torch.load(f"{args['logdir']}/checkpoints/best.pth")
+    checkpoints = torch.load(f"{args['logdir']}/checkpoints/{'best' if str_2_bool(args['best']) else 'last'}.pth")
     model.load_state_dict(checkpoints['model_state_dict'])
+    model.eval()
 
     # D4 makes horizontal and vertical flips + rotations for [0, 90, 180, 270] angels.
     # and then merges the result masks with merge_mode="mean"
@@ -92,12 +106,13 @@ def test_tta(config, args):
 
     tta_predictions = np.vstack(tta_predictions)
 
-    if args['createprob']:
+    if str_2_bool(args['createprob']):
         for i, (features, logits) in tqdm(enumerate(zip(test_dataset, tta_predictions))):
             image_name = features['filename']
             mask_ = torch.from_numpy(logits[0]).sigmoid()
             mask_arr = mask_.numpy()
 
+            assert str(mask_arr.dtype) == 'float32'
             out_path = Path(config['out_dir']) / 'tta' / \
                 config['lesion_type'] / 'prob_image' / \
                 Path(args['logdir']).name
@@ -109,7 +124,7 @@ def test_tta(config, args):
             predicted_save = Image.fromarray(
                 (mask_arr*255).astype('uint8'))
             predicted_save.save(out_name, "JPEG", quality=100)
-
+            print(f'Saved {image_name} to {str(out_path)}')
     else:
         threshold = args['optim_thres']  # Need to choose best threshold
         for i, (features, logits) in enumerate(zip(test_dataset, tta_predictions)):
@@ -144,7 +159,7 @@ def tta_patches(config, args):
             model_name=config['model_name'], 
             params = config['model_params'])
 
-    checkpoints = torch.load(f"{args['logdir']}/checkpoints/best.pth")
+    checkpoints = torch.load(f"{args['logdir']}/checkpoints/{'best' if str_2_bool(args['best']) else 'last'}.pth")
     model.load_state_dict(checkpoints['model_state_dict'])
     model = model.to(utils.get_device())
     model.eval()
@@ -213,6 +228,7 @@ if __name__ == '__main__':
                        help='Just create a prob mask not binary')
     parse.add_argument('--optim_thres', type=float, default=0.0,
                        help='The optimal threshold optain from auc-pr curve')
+    parse.add_argument('--best', default='true', type=str, help='Using best checkpoint or last checkpoint')
     args = vars(parse.parse_args())
 
     config = TestConfig.get_all_attributes()

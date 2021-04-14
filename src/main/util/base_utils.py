@@ -29,7 +29,8 @@ lesion_dict = {
     'HE': Lesion(dir_name='2. Haemorrhages',
            project_name='HaemorrhageSegmentation'),
     'SE': Lesion(dir_name='4. Soft Exudates',
-           project_name='SoftExudatesSegmentation')
+           project_name='SoftExudatesSegmentation'),
+    'OD': Lesion(dir_name='5. Optic Disc', project_name='OpticDiscSegmentation')
 }
 
 def make_grid(shape, window=256, min_overlap=32):

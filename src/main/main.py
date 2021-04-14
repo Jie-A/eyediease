@@ -169,7 +169,6 @@ def main(configs, seed):
         model, preprocessing_fn = models.get_model(
             model_name=configs['model_name'], 
             params = configs['model_params'])
-
         use_smp = False
 
     #Define transform (augemntation)
