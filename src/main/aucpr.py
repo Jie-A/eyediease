@@ -34,11 +34,11 @@ def main(test_config, args):
     for image_path in tqdm(list(gt_dir.glob('*.tif'))):
         prob_name = re.sub('_' + test_config['lesion_type']+ '.tif', '.jpg', image_path.name)
         im_prob = Image.open(os.path.join(prob_dir,prob_name))
-        im_prob = im_prob.resize((1024, 1024))
+        im_prob = im_prob.resize((1024, 1024), resample=Image.BILINEAR)
         im_size = im_prob.size
 
         im_gt = Image.open(str(image_path))
-        im_gt = im_gt.resize((1024, 1024))
+        im_gt = im_gt.resize((1024, 1024), resample=Image.BILINEAR)
         
         arr_gt = np.asarray(im_gt).astype(np.uint8)
 
@@ -61,10 +61,13 @@ def main(test_config, args):
     auc_score = auc(recall, precision)
 
     #https://www.kaggle.com/nicholasgah/optimal-probability-thresholds-using-pr-curve
-    optimal_proba_cutoff = sorted(list(zip(
+    optimal_threshold = sorted(list(zip(
         np.abs(precision - recall), thresholds)), key=lambda i: i[0], reverse=False)[0][1]
 
-    logging.info(f'OPTIMAL THRESHOLD: {optimal_proba_cutoff}')
+    optimal_threshold_1 = sorted(list(zip(np.sqrt((1-precision)**2 + (1-recall)**2), thresholds)), key=lambda i: i[0], reverse=False)[0][1]
+
+    logging.info(f'OPTIMAL THRESHOLD: {optimal_threshold}')
+    logging.info(f'OPTIMAL THRESHOLD 1: {optimal_threshold_1}')
 
     fig = px.area(
         x=recall, y=precision,

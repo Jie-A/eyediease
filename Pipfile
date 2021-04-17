@@ -28,6 +28,8 @@ tree = "*"
 tensorboard = "*"
 numba = "*"
 self-attention-cv = "*"
+notebook = "*"
+timm = "*"
 
 [dev-packages]
 autopep8 = "*"

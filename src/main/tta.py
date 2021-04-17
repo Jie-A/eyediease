@@ -26,7 +26,7 @@ from config import TestConfig
 from data import EasyTransform
 from data import TestSegmentation
 from util import make_grid, save_output as so
-import models
+import archs
 
 def get_model(params, model_name):
     # Model return logit values
@@ -53,11 +53,10 @@ def test_tta(config, args):
             config['model_params'], config['model_name'])
     elif config['model_name'] == "TransUnet":
         from self_attention_cv.transunet import TransUnet
-
         model = TransUnet(**config['model_params'])
-        preprocessing_fn = models.get_preprocessing_fn(pretrained=None)
+        preprocessing_fn = archs.get_preprocessing_fn(pretrained=None)
     else:
-        model, preprocessing_fn = models.get_model(
+        model, preprocessing_fn = archs.get_model(
             model_name=config['model_name'], 
             params = config['model_params'])
 
@@ -89,8 +88,10 @@ def test_tta(config, args):
 
     # D4 makes horizontal and vertical flips + rotations for [0, 90, 180, 270] angels.
     # and then merges the result masks with merge_mode="mean"
+    tta_transform = getattr(tta.aliases, args['tta'] + '_transform')
+    param = {'scales': [1,2,4]} if args['tta'] == 'multiscale' else {}
     tta_model = tta.SegmentationTTAWrapper(
-        model, tta.aliases.d4_transform(), merge_mode="mean")
+        model, tta_transform(**param), merge_mode="mean")
 
     tta_runner = SupervisedRunner(
         model=tta_model,
@@ -151,11 +152,10 @@ def tta_patches(config, args):
             config['model_params'], config['model_name'])
     elif config['model_name'] == "TransUnet":
         from self_attention_cv.transunet import TransUnet
-
         model = TransUnet(**config['model_params'])
-        preprocessing_fn = models.get_preprocessing_fn(pretrained=None)
+        preprocessing_fn = archs.get_preprocessing_fn(pretrained=None)
     else:
-        model, preprocessing_fn = models.get_model(
+        model, preprocessing_fn = archs.get_model(
             model_name=config['model_name'], 
             params = config['model_params'])
 
@@ -164,9 +164,11 @@ def tta_patches(config, args):
     model = model.to(utils.get_device())
     model.eval()
 
+    tta_transform = getattr(tta.aliases, args['tta'] + '_transform')
+    param = {'scales': [1,2,4]} if args['tta'] == 'multiscale' else {}
     tta_model = tta.SegmentationTTAWrapper(
-        model, tta.aliases.d4_transform(), merge_mode="mean")
-
+        model, tta_transform(**param), merge_mode="mean")
+    
     test_transform = A.Compose([
         A.Resize(256, 256),
         A.Lambda(image = preprocessing_fn),
@@ -190,7 +192,7 @@ def tta_patches(config, args):
                     logit = tta_model(image)[0][0]
                     score_sigmoid = logit.sigmoid().cpu().numpy()
                     # print(np.unique(score_sigmoid, return_counts=True))
-                    score_sigmoid = cv2.resize(score_sigmoid, (512, 512))
+                    score_sigmoid = cv2.resize(score_sigmoid, (512, 512), interpolation=cv2.INTER_LINEAR)
 
                     if not str_2_bool(args['createprob']):
                         preds[x1:x2, y1:y2] = (score_sigmoid > args['optim_thres'])
@@ -228,7 +230,10 @@ if __name__ == '__main__':
                        help='Just create a prob mask not binary')
     parse.add_argument('--optim_thres', type=float, default=0.0,
                        help='The optimal threshold optain from auc-pr curve')
-    parse.add_argument('--best', default='true', type=str, help='Using best checkpoint or last checkpoint')
+    parse.add_argument('--best', default='true', type=str, 
+                        help='Using best checkpoint or last checkpoint')
+    parse.add_argument('--tta', default='d4', 
+                        help='Test Time Augmentation, available:d4, multiscale, flip, hflip, five_crop, ten_crop')
     args = vars(parse.parse_args())
 
     config = TestConfig.get_all_attributes()

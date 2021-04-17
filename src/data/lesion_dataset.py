@@ -49,10 +49,11 @@ lesion_paths = {
 }
 
 class OneLesionSegmentation(Dataset):
-    def __init__(self, images: List[Path], masks: List[Path] = None, transform=None, preprocessing_fn=None, data_type = 'all'):
+    def __init__(self, images: List[Path], masks: List[Path] = None, transform=None, preprocessing_fn=None, ben_transform = None, data_type = 'all'):
         self.images = images
         self.mask_paths = masks
         self.transform = transform
+        self.ben_transform = ben_transform
         self.preprocessing_fn = preprocessing_fn
         self.mode = data_type
         self.len = len(images)
@@ -70,10 +71,7 @@ class OneLesionSegmentation(Dataset):
 
     def build_slide(self):
         self.masks = []
-        self.files = []
-        self.slices = []
         for i, img_path in enumerate(self.images):
-            self.files.append(img_path)
             
             with rasterio.open(img_path, transform = self.identity) as dataset:
                 mask = Image.open(self.mask_paths[i])
@@ -84,7 +82,6 @@ class OneLesionSegmentation(Dataset):
                 for j, slc in tqdm(enumerate(slices)):
                     x1,x2,y1,y2 = slc
                     if self.masks[-1][x1:x2,y1:y2].sum() > self.threshold:
-                        self.slices.append([i,x1,x2,y1,y2])
                         
                         image = dataset.read([1,2,3],
                             window=Window.from_slices((x1,x2),(y1,y2)))
@@ -108,6 +105,9 @@ class OneLesionSegmentation(Dataset):
         if self.transform is not None:
             results = self.transform(image=image, mask=mask)
             image, mask = results['image'], results['mask']
+        
+        if self.ben_transform:
+            image = self.ben_transform(image, img_size=image.shape[:2])
 
         if self.preprocessing_fn is not None:
             result = self.preprocessing_fn(image=image)

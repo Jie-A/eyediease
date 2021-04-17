@@ -35,13 +35,13 @@ sys.path.append('..')
 
 import util
 from util import lesion_dict, AucPRMetricCallback
-from data import MediumTransform as Transform
+from data import load_ben_color, MediumTransform as Transform
 from scheduler import get_scheduler
 from optim import get_optimizer
 from losses import get_loss, WeightedBCEWithLogits
 from config import BaseConfig
 from data import OneLesionSegmentation, MultiLesionSegmentation, CLASS_COLORS, CLASS_NAMES
-import models
+import archs
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -51,7 +51,6 @@ def get_model(params, model_name):
     model = getattr(smp, model_name)(
         **params
     )
-
     if params['encoder_weights'] is None:
         preprocessing_fn = smp.encoders.get_preprocessing_fn(
             params['encoder_name'], "imagenet")
@@ -72,6 +71,7 @@ def get_loader(
     train_transforms_fn=None,
     valid_transforms_fn=None,
     preprocessing_fn=None,
+    ben_method = None,
     masks: List[Path] = None,
     mode='binary',
     data_type = 'tile'
@@ -91,6 +91,7 @@ def get_loader(
             masks=np_masks[train_indices].tolist(),
             transform=train_transforms_fn,
             preprocessing_fn=preprocessing_fn,
+            ben_transform = ben_method,
             data_type = data_type
         )
 
@@ -99,6 +100,7 @@ def get_loader(
             masks=np_masks[valid_indices].tolist(),
             transform=valid_transforms_fn,
             preprocessing_fn=preprocessing_fn,
+            ben_transform = ben_method,
             data_type = data_type
         )
     else:
@@ -106,6 +108,7 @@ def get_loader(
             np_images[train_indices].tolist(),
             mask_dir=mask_dir,
             transform=train_transforms_fn,
+            ben_transform = ben_method,
             preprocessing_fn=preprocessing_fn
         )
 
@@ -113,6 +116,7 @@ def get_loader(
             np_images[valid_indices].tolist(),
             mask_dir=mask_dir,
             transform=valid_transforms_fn,
+            ben_transform = ben_method,
             preprocessing_fn=preprocessing_fn
         )
 
@@ -155,18 +159,11 @@ def main(configs, seed):
             configs['model_params'], configs['model_name'])
     elif configs['model_name'] == "TransUnet":
         from self_attention_cv.transunet import TransUnet
-        # from self_attention_cv.vit import ResNet50ViT
-
-        # configs['model_params']['vit_transformer'] = ResNet50ViT(
-        #     classification=False,
-        #     pretrained_resnet=True,
-
-        # )
         model = TransUnet(**configs['model_params'])
-        preprocessing_fn = models.get_preprocessing_fn(pretrained=None)
+        preprocessing_fn = archs.get_preprocessing_fn(pretrained=None)
         use_smp=False
     else:
-        model, preprocessing_fn = models.get_model(
+        model, preprocessing_fn = archs.get_model(
             model_name=configs['model_name'], 
             params = configs['model_params'])
         use_smp = False
@@ -194,6 +191,10 @@ def main(configs, seed):
         mask_dirs = None
 
     # Get data loader
+    if configs['use_ben_transform']:
+        ben_transform = load_ben_color
+    else:
+        ben_transform = None
     loader, log_info = get_loader(
         images=ex_dirs,
         masks=mask_dirs,
@@ -205,6 +206,7 @@ def main(configs, seed):
         train_transforms_fn=train_transform,
         valid_transforms_fn=val_transform,
         preprocessing_fn=preprocessing,
+        ben_method = ben_transform,
         mode=configs['data_mode'],
         data_type=configs['data_type']
     )
@@ -212,13 +214,13 @@ def main(configs, seed):
     #Visualize on terminal
     util.log_pretty_table(log_info[0], log_info[1])
 
-    if configs['finetune']:
-        if use_smp:
+    if use_smp:
+        if configs['finetune']:
             #Free all weights in the encoder of model
-            bn_types = nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.SyncBatchNorm
             for param in model.encoder.parameters():
                 param.requires_grad = False
-
+        if configs['encoder_weights'] is not None:
+            bn_types = nn.BatchNorm2d
             #Disable batchnorm update
             for m in model.encoder.modules():
                 if isinstance(m, bn_types):
@@ -234,13 +236,8 @@ def main(configs, seed):
     if hasattr(model, 'head'):
         head_params = filter(lambda p: p.requires_grad, model.head.parameters())
         param_group += [{'params': head_params}]        
-
     if len(param_group) == 0:
         param_group = [{'params': filter(lambda p: p.requires_grad, model.parameters())}]
-        # #Define training configurations
-        # #Dont set weight decay for batchnorm
-        # parameters = add_weight_decay.add_weight_decay(
-        #     model, weight_decay=configs['weight_decay'])
 
     logging.info(
         f'[INFO] total and trainable parameters in the model {count_parameters(model)}')
