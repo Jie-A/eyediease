@@ -1,10 +1,9 @@
 from PIL import Image
-from numba.np.ufunc import parallel
 import numpy as np
 import os
 import re
 import sys
-from sklearn.metrics import average_precision_score, precision_recall_curve, auc
+from sklearn.metrics import precision_recall_curve, auc
 from pathlib import Path
 from tqdm .auto import tqdm
 import plotly.express as px
@@ -12,18 +11,15 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-import argparse
+# import sys
+# sys.path.append('..')
 
-import sys
-sys.path.append('..')
+from .util import lesion_dict
 
-from util import lesion_dict
-from config import TestConfig
-
-def main(test_config, args):    
-    gt_dir = Path(test_config['test_mask_paths']) / lesion_dict[test_config['lesion_type']].dir_name
-    prob_dir = os.path.join(test_config['out_dir'], 'tta', test_config['lesion_type'], 'prob_image', args['exp_name']) 
-    figure_dir = os.path.join(test_config['out_dir'], 'figures', test_config['lesion_type']) 
+def get_auc(exp_name, test_config):    
+    gt_dir = test_config['test_mask_paths'] / lesion_dict[test_config['lesion_type']].dir_name
+    prob_dir = os.path.join(test_config['out_dir'], test_config['dataset_name'] ,'tta', test_config['lesion_type'], 'prob_image', exp_name) 
+    figure_dir = os.path.join(test_config['out_dir'], test_config['dataset_name'], 'figures', test_config['lesion_type']) 
 
     if not os.path.exists(figure_dir):
         os.makedirs(figure_dir)
@@ -81,12 +77,7 @@ def main(test_config, args):
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
     fig.update_xaxes(constrain='domain')
-    fig.write_image(figure_dir + "/{}.jpg".format(args['exp_name']))
+    fig.write_image(figure_dir + "/{}.jpg".format(exp_name))
+    logging.info(f'Saved AUC-PR Curve to {figure_dir}')
 
-if __name__ == '__main__':
-    parse = argparse.ArgumentParser()
-    parse.add_argument('--exp_name', required=True, help='Name of the experiment')
-    args = vars(parse.parse_args())
-    test_config = TestConfig.get_all_attributes()
-
-    main(test_config, args)
+    return optimal_threshold, optimal_threshold_1

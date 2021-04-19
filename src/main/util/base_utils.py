@@ -3,12 +3,8 @@ from pathlib import Path
 import collections
 import os
 import numpy as np
-import random
-import matplotlib.pyplot as plt
 from typing import List, Callable
 from PIL import Image
-from skimage.io import imread as mask_read
-from catalyst.contrib.utils.cv import image as cata_image
 from catalyst.utils.distributed import (
     get_distributed_env,
     get_distributed_params,
@@ -84,41 +80,6 @@ def get_datapath(img_path: Path, mask_path: Path, lesion_type: str = 'EX'):
         map(lambda x: Path(os.path.join(mask_path, lesion_path, x)), mask_names))
 
     return sorted(full_img_paths), sorted(full_mask_paths)
-
-
-
-
-
-def show_examples(name: str, image: np.ndarray, mask: np.ndarray):
-    plt.figure(figsize=(10, 14))
-    plt.subplot(1, 2, 1)
-    plt.imshow(image)
-    plt.title(f"Image: {name}")
-
-    plt.subplot(1, 2, 2)
-    plt.imshow(mask)
-    plt.title(f"Mask: {name}")
-
-
-def show(index: int, images: List[Path], masks: List[Path], transforms=None) -> None:
-    image_path = images[index]
-    name = image_path.name
-
-    image = cata_image.imread(image_path)
-    mask = mask_read(masks[index]).astype(np.float32)
-
-    if transforms is not None:
-        temp = transforms(image=image, mask=mask)
-        image = temp["image"]
-        mask = temp["mask"]
-
-    show_examples(name, image, mask)
-
-
-def show_random(images: List[Path], masks: List[Path], transforms=None) -> None:
-    length = len(images)
-    index = random.randint(0, length - 1)
-    show(index, images, masks, transforms)
 
 
 def save_output(pred_masks: np.ndarray, out_path: Path):

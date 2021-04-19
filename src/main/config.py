@@ -1,19 +1,20 @@
 from pprint import pprint
+from pathlib import Path
 
 __all__ = ['BaseConfig', 'TestConfig']
 
-
 class BaseConfig:
-    train_img_path = '../../data/raw/IDRiD/1. Original Images/a. Training Set'
-    train_mask_path = '../../data/raw/IDRiD/2. All Segmentation Groundtruths/a. Training Set/'
-    
-    lesion_type = 'MA'
+    __basedir__ = 'data/raw/'
     dataset_name = 'IDRiD'
-    data_mode = 'binary'
-    augmentation = 'medium'
-    use_ben_transform = False
+    train_img_path = Path(__basedir__) / dataset_name / '1. Original Images/a. Training Set'
+    train_mask_path = Path(__basedir__) / dataset_name / '2. All Segmentation Groundtruths/a. Training Set/'
+    
+    lesion_type = 'SE'
+    data_mode = 'binary' 
+    augmentation = 'medium' #options: normal, easy, medium, advanced
+    use_ben_transform = False #Good for vessel segmentation
     scale_size = 256
-    data_type = 'tile'  #2 type of input format : whole image or patches
+    data_type = 'tile'  #2 type of input format : whole image or tiles
 
     #Final
     finetune = False  # Traning only decoder
@@ -26,12 +27,12 @@ class BaseConfig:
     is_fp16 = False
 
     #first
-    model_name = "efficientnetb2_attunet"
+    model_name = "efficientnetb2_doubleunet"
     model_params =  {"num_classes": 1, 
-    "drop_rate": 0.2, 
-    "pretrained": True, 
-    "freeze_bn": False, 
-    "freeze_backbone": False}
+                    "drop_rate": 0.2, 
+                    "pretrained": True, 
+                    "freeze_bn": False, 
+                    "freeze_backbone": False}
 
     #Choose at first and no need to change
     metric = "auc_pr"
@@ -46,7 +47,7 @@ class BaseConfig:
     optimizer = "madgrad"
     scheduler = "simple"
 
-    resume_path = "../../models/MA/Apr17_11_42/checkpoints/best_full.pth"
+    resume_path = None #Resume training
 
     @classmethod
     def get_all_attributes(cls):
@@ -63,10 +64,9 @@ class BaseConfig:
 
 
 class TestConfig(BaseConfig):
-    test_img_paths = '../../data/raw/IDRiD/1. Original Images/b. Testing Set'
-    test_mask_paths = '../../data/raw/IDRiD/2. All Segmentation Groundtruths/b. Testing Set'
-    out_dir = '../../outputs'
-    out_figures = out_dir + '/figures'
+    test_img_paths = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '1. Original Images/b. Testing Set'
+    test_mask_paths = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '2. All Segmentation Groundtruths/b. Testing Set'
+    out_dir = 'outputs'
 
 
 if __name__ == '__main__':

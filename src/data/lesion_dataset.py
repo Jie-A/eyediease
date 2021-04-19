@@ -17,9 +17,7 @@ from tqdm.auto import tqdm
 import rasterio
 from rasterio.windows import Window
 
-import sys
-sys.path.append('../main/')
-from util import make_grid
+from ..main.util import make_grid
 
 __all__ = ['CLASS_NAMES', 'CLASS_COLORS', 'OneLesionSegmentation',
            'MultiLesionSegmentation', 'TestSegmentation']

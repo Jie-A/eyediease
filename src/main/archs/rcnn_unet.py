@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data
 import torch
-from modules import *
+from .modules import *
 
 class R2U_Net(nn.Module):
     """
@@ -34,16 +34,16 @@ class R2U_Net(nn.Module):
 
         self.RRCNN5 = RRCNN_block(filters[3], filters[4], t=t)
 
-        self.Up5 = up_conv(filters[4], filters[3])
+        self.Up5 = Up(filters[4], filters[3])
         self.Up_RRCNN5 = RRCNN_block(filters[4], filters[3], t=t)
 
-        self.Up4 = up_conv(filters[3], filters[2])
+        self.Up4 = Up(filters[3], filters[2])
         self.Up_RRCNN4 = RRCNN_block(filters[3], filters[2], t=t)
 
-        self.Up3 = up_conv(filters[2], filters[1])
+        self.Up3 = Up(filters[2], filters[1])
         self.Up_RRCNN3 = RRCNN_block(filters[2], filters[1], t=t)
 
-        self.Up2 = up_conv(filters[1], filters[0])
+        self.Up2 = Up(filters[1], filters[0])
         self.Up_RRCNN2 = RRCNN_block(filters[1], filters[0], t=t)
 
         self.Conv = nn.Conv2d(filters[0], output_ch, kernel_size=1, stride=1, padding=0)

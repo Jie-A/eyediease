@@ -14,6 +14,7 @@ from .model_util import init_weights
 
 __all__ = [
     'Attention_Unet', 
+    'Unet_Encoder',
     'resnet50_attunet', 
     'efficientnetb2_attunet', 
     'mobilenetv3_attunet'
@@ -77,7 +78,10 @@ class Unet_Decoder(nn.Module):
             next_up = Up_Atten(in_ch, out_ch)
             self.decoder_output.append(next_up)
         self.dropout = nn.Dropout2d(dropout)
-        self.out_conv = OutConv(self.encoder_channels[-1], n_classes)
+        self.out_conv = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
+            OutConv(self.encoder_channels[-1], n_classes)
+        )
         init_weights(self)
 
     def forward(self, encoder_features):      
@@ -109,7 +113,6 @@ class Attention_Unet(nn.Module):
         encoder_outputs = self.encoder(x)
         #Decode
         final = self.decoder(encoder_outputs)
-        
         # if the input is not divisible by the output stride
         if final.size(2) != H or final.size(3) != W:
             final = F.interpolate(final, size=(H, W), mode="bilinear", align_corners=True)
@@ -363,4 +366,10 @@ if __name__ == '__main__':
     import timm
     model_lists = timm.list_models(filter='mobile**', pretrained=True)
     print(model_lists)
+    encoder = timm.create_model('mobilenetv3_large_100', features_only=True, pretrained=True)
+    a = torch.randn(1, 3, 256, 256)
+    output = encoder(a)
+    for o in output:
+        print(o.shape)
+    print(encoder.feature_info.channels())
     test_4()

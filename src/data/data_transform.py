@@ -1,11 +1,15 @@
 import albumentations as A
-from albumentations.pytorch import ToTensor
 import cv2
 import numpy as np
 from typing import Tuple
 
-__all__ = ['BaseTransform', 'EasyTransform', 'MediumTransform' ,'NormalTransform', 'AdvancedTransform', 'load_ben_color']
-
+__all__ = ['BaseTransform', 
+        'EasyTransform', 
+        'MediumTransform' ,
+        'NormalTransform', 
+        'AdvancedTransform', 
+        'load_ben_color']
+    
 class BaseTransform(object):
 
     def __init__(self, image_size: int = 1024, preprocessing_fn=None):
