@@ -5,8 +5,8 @@ import torch.nn.functional as F
 
 from .modules import *
 
-
 __all__ = ['UNet']
+
 class UNet(nn.Module):
     def __init__(self, n_channels, n_classes, bilinear=True):
         super(UNet, self).__init__()

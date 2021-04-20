@@ -228,8 +228,8 @@ def train_model(exp_name, configs, seed):
     if hasattr(model, 'decoder'):
         decoder_params = filter(lambda p: p.requires_grad, model.decoder.parameters())
         param_group += [{'params': decoder_params}]        
-    if hasattr(model, 'head'):
-        head_params = filter(lambda p: p.requires_grad, model.head.parameters())
+    if hasattr(model, 'segmentation_head'):
+        head_params = filter(lambda p: p.requires_grad, model.segmentation_head.parameters())
         param_group += [{'params': head_params}]        
     if len(param_group) == 0:
         param_group = [{'params': filter(lambda p: p.requires_grad, model.parameters())}]
@@ -240,7 +240,6 @@ def train_model(exp_name, configs, seed):
 
     logging.info(
         f'[INFO] total and trainable parameters in the model {count_parameters}')
-    
     
     #Set optimizer
     optimizer = get_optimizer(
@@ -315,7 +314,7 @@ def train_model(exp_name, configs, seed):
     dice_scores = DiceCallback(
         input_key="mask",
         activation="Sigmoid",
-        threshold=0.5
+    threshold=0.5
     )
 
     aucpr_scores = AucPRMetricCallback(
