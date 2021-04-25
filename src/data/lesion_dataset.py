@@ -16,7 +16,8 @@ from tqdm.auto import tqdm
 
 import rasterio
 from rasterio.windows import Window
-
+# import sys
+# sys.path.append('..')
 from ..main.util import make_grid
 
 __all__ = ['CLASS_NAMES', 'CLASS_COLORS', 'OneLesionSegmentation',
@@ -70,9 +71,9 @@ class OneLesionSegmentation(Dataset):
     def build_slide(self):
         self.masks = []
         for i, img_path in enumerate(self.images):
-            
             with rasterio.open(img_path, transform = self.identity) as dataset:
-                mask = Image.open(self.mask_paths[i])
+                mask = Image.open(self.mask_paths[i]).convert('L')
+                mask = mask.point(lambda x: 255 if x > 0 else 0, '1')
                 mask = np.asarray(mask).astype(np.float32)
                 self.masks.append(mask)
                 slices = make_grid(dataset.shape, window=self.window, min_overlap=self.overlap)
@@ -93,7 +94,8 @@ class OneLesionSegmentation(Dataset):
         if self.mode == 'all':
             image_path = self.images[index]
             image = cata_image.imread(image_path)
-            mask = Image.open(self.mask_paths[index])
+            mask = Image.open(self.mask_paths[index]).convert('L')
+            mask = mask.point(lambda x: 255 if x > 0 else 0, '1')
             mask = np.asarray(mask).astype(np.float32)
             image_id = fs.id_from_fname(image_path)
         else:
@@ -183,8 +185,9 @@ class TestSegmentation(Dataset):
         image = cata_image.imread(image_path)
         result['image'] = image
         if self.masks is not None:
-            mask = cv2.imread(str(self.masks[index]), cv2.IMREAD_GRAYSCALE)
-            _, mask = cv2.threshold(mask, 0, 1, cv2.THRESH_BINARY)
+            mask = Image.open(self.masks[index]).convert('L')
+            mask = mask.point(lambda x: 255 if x > 0 else 0, '1')
+            mask = np.asarray(mask).astype(np.uint8)
             result['mask'] = mask
 
         if self.transform is not None:

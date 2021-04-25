@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from pytorch_toolbelt.losses import *
 from torch import nn
 from torch.nn import KLDivLoss
+from .lovasz import lovasz_hinge, BinaryLovaszLoss as CustomLovaszLoss
 
 __all__ = ["get_loss", "WeightedBCEWithLogits", "KLDivLossWithLogits"]
 
@@ -119,6 +120,11 @@ class KLDivLossWithLogits(KLDivLoss):
         loss = F.kl_div(log_p, target, reduction="mean")
         return loss
 
+class SymmetricLovasz(nn.Module):
+    def __init__(self):
+        super().__init__()
+    def forward(self, outputs, targets):
+        return 0.5*(lovasz_hinge(outputs, targets) + lovasz_hinge(-outputs, 1.0 - targets))
 
 def get_loss(loss_name: str, ignore_index=None):
     if loss_name.lower() == "kl":
@@ -145,7 +151,10 @@ def get_loss(loss_name: str, ignore_index=None):
 
     if loss_name.lower() == "lovasz":
         assert ignore_index is None
-        return BinaryLovaszLoss()
+        return CustomLovaszLoss()
+    
+    if loss_name.lower() == "symmetric_lovasz":
+        return SymmetricLovasz()
 
     if loss_name.lower() == "log_jaccard":
         assert ignore_index is None

@@ -1,9 +1,13 @@
 import random
+import os
 import cv2
+import re
+from tqdm.auto import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from typing import List, Callable
+from PIL import Image
 from skimage.io import imread as mask_read
 from catalyst.contrib.utils.cv import image as cata_image
 
@@ -38,20 +42,12 @@ def show_random(images: List[Path], masks: List[Path], transforms=None) -> None:
     index = random.randint(0, length - 1)
     show(index, images, masks, transforms)
 
-
-def draw_inria_predictions(
-    input: dict,
-    output: dict,
-    inputs_to_labels:Callable,
-    outputs_to_labels: Callable,
-    image_key="features",
-    image_id_key: Optional[str] = "image_id",
-    targets_key="targets",
-    outputs_key="logits",
-    mean=(0.485, 0.456, 0.406),
-    std=(0.229, 0.224, 0.225),
-    max_images=None,
-    image_format: Union[str, Callable] = "bgr",
+def overlay_mask_image(
+    image: Path, 
+    groundtruth: Path,
+    binary_mask: Path,
+    lesion_type: str,
+    is_save: bool
 ) -> List[np.ndarray]:
     """
     Render visualization of model's prediction for binary segmentation problem.
@@ -59,81 +55,48 @@ def draw_inria_predictions(
         - green: True positives
         - red: False-negatives
         - yellow: False-positives
-    :param input: Input batch (model's input batch)
-    :param output: Output batch (model predictions)
-    :param image_key: Key for getting image
-    :param image_id_key: Key for getting image id/fname
-    :param targets_key: Key for getting ground-truth mask
-    :param outputs_key: Key for getting model logits for predicted mask
-    :param mean: Mean vector user during normalization
-    :param std: Std vector user during normalization
-    :param max_images: Maximum number of images to visualize from batch
-        (If you have huge batch, saving hundreds of images may make TensorBoard slow)
-    :param targets_threshold: Threshold to convert target values to binary.
-        Default value 0.5 is safe for both smoothed and hard labels.
-    :param logits_threshold: Threshold to convert model predictions (raw logits) values to binary.
-        Default value 0.0 is equivalent to 0.5 after applying sigmoid activation
-    :param image_format: Source format of the image tensor to conver to RGB representation.
-        Can be string ("gray", "rgb", "brg") or function `convert(np.ndarray)->nd.ndarray`.
-    :return: List of images
     """
-    images = []
-    num_samples = len(input[image_key])
-    if max_images is not None:
-        num_samples = min(num_samples, max_images)
+    exp_name = binary_mask.name
+    if is_save:
+        save_dir = binary_mask.parent.parent.parent / 'gt_vs_prd' / lesion_type / exp_name
+        if not os.path.exists(save_dir):    
+            os.makedirs(save_dir, exist_ok=True)
 
-    true_masks = to_numpy(inputs_to_labels(input[targets_key])).astype(bool)
-    pred_masks = to_numpy(outputs_to_labels(output[outputs_key])).astype(bool)
+    gt_paths = list(groundtruth.glob('*.tif'))
+    for i in tqdm(range(len(gt_paths))):
+        img_name = re.sub('_' + lesion_type + '.tif', '.jpg', gt_paths[i].name)
+        img = cv2.imread(str(image/img_name), cv2.IMREAD_COLOR)
+        overlay = img.copy()
+        true_mask = cv2.imread(str(gt_paths[i]), cv2.IMREAD_GRAYSCALE) / true_mask.max()
+        true_mask = true_mask.astype(np.uint8)
+        pred_mask = cv2.imread(str(binary_mask / img_name), cv2.IMREAD_GRAYSCALE)
+        _, pred_mask = cv2.threshold(pred_mask, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        pred_mask = (pred_mask / 255).astype(np.uint8)
 
-    for i in range(num_samples):
-        image = rgb_image_from_tensor(input[image_key][i], mean, std)
-
-        if image_format == "bgr":
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        elif image_format == "gray":
-            image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-        elif hasattr(image_format, "__call__"):
-            image = image_format(image)
-
-        overlay = image.copy()
-        true_mask = true_masks[i]
-        pred_mask = pred_masks[i]
-
+        # overlay = cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR)
+        print(overlay.dtype)
         overlay[true_mask & pred_mask] = np.array(
             [0, 250, 0], dtype=overlay.dtype
         )  # Correct predictions (Hits) painted with green
-        overlay[true_mask & ~pred_mask] = np.array([250, 0, 0], dtype=overlay.dtype)  # Misses painted with red
-        overlay[~true_mask & pred_mask] = np.array(
-            [250, 250, 0], dtype=overlay.dtype
-        )  # False alarm painted with yellow
-        overlay = cv2.addWeighted(image, 0.5, overlay, 0.5, 0, dtype=cv2.CV_8U)
+        # overlay[true_mask & ~pred_mask] = np.array([250, 0, 0], dtype=overlay.dtype)  # Misses painted with red
+        # overlay[~true_mask & pred_mask] = np.array(
+        #     [250, 250, 0], dtype=overlay.dtype
+        # )  # False alarm painted with yellow
+        overlay = cv2.addWeighted(img, 0.5, overlay, 0.5, 0, dtype=cv2.CV_8U)
+        cv2.putText(overlay, str(img_name[:-4]), (10, 15), cv2.FONT_HERSHEY_PLAIN, 10, (250, 250, 250))
+        
+        if is_save:
+            cv2.imwrite(str(save_dir / img_name), overlay)
+            print('Saved!', img_name)
 
-        if OUTPUT_OFFSET_KEY in output:
-            offset = to_numpy(output[OUTPUT_OFFSET_KEY][i]) * 32
-            offset = np.expand_dims(offset, -1)
-
-            x = offset[0, ...].clip(min=0, max=1) * np.array([255, 0, 0]) + (-offset[0, ...]).clip(
-                min=0, max=1
-            ) * np.array([0, 0, 255])
-            y = offset[1, ...].clip(min=0, max=1) * np.array([255, 0, 255]) + (-offset[1, ...]).clip(
-                min=0, max=1
-            ) * np.array([0, 255, 0])
-
-            offset = (x + y).clip(0, 255).astype(np.uint8)
-            offset = cv2.resize(offset, (image.shape[1], image.shape[0]))
-            overlay = np.row_stack([overlay, offset])
-
-        dsv_inputs = [OUTPUT_MASK_2_KEY, OUTPUT_MASK_4_KEY, OUTPUT_MASK_8_KEY, OUTPUT_MASK_16_KEY, OUTPUT_MASK_32_KEY]
-        for dsv_input_key in dsv_inputs:
-            if dsv_input_key in output:
-                dsv_p = to_numpy(output[dsv_input_key][i].detach().float().sigmoid().squeeze(0))
-                dsv_p = cv2.resize((dsv_p * 255).astype(np.uint8), (image.shape[1], image.shape[0]))
-                dsv_p = cv2.cvtColor(dsv_p, cv2.COLOR_GRAY2RGB)
-                overlay = np.row_stack([overlay, dsv_p])
-
-        if image_id_key is not None and image_id_key in input:
-            image_id = input[image_id_key][i]
-            cv2.putText(overlay, str(image_id), (10, 15), cv2.FONT_HERSHEY_PLAIN, 1, (250, 250, 250))
-
-        images.append(overlay)
-    return images
+if __name__ == '__main__':
+    import sys
+    sys.path.append('..')
+    from main.config import TestConfig
+    from main.util.base_utils import lesion_dict
+    overlay_mask_image(
+        '../..' / TestConfig.test_img_path, 
+        '../..'/ TestConfig.test_mask_path / lesion_dict['SE'].dir_name, 
+        Path('../../outputs/IDRiD/tta/SE/Apr21_18_47'),
+        lesion_type='SE',
+        is_save=True)

@@ -111,29 +111,24 @@ class MediumTransform(NormalTransform):
         ]
 
 class AdvancedTransform(NormalTransform):
-    def __init__(self):
-        super(AdvancedTransform, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(AdvancedTransform, self).__init__(*args, **kwargs)
     
     def hard_transform(self):
         return A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.RandomRotate90(p=0.7),
-
             A.OneOf([
                 A.RandomContrast(),
                 A.RandomGamma(),
                 A.RandomBrightness(),
-                A.ColorJitter(brightness=0.07, contrast=0.07,
-                        saturation=0.1, hue=0.1, always_apply=False, p=0.3),
-                ], p=0.3),
-
+            ]),
             A.OneOf([
                 A.ElasticTransform(alpha=120, sigma=120 * 0.05, alpha_affine=120 * 0.03),
                 A.GridDistortion(),
                 A.OpticalDistortion(distort_limit=2, shift_limit=0.5),
                 ], p=0.0),
-
             A.ShiftScaleRotate(),
         ])
 

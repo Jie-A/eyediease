@@ -7,41 +7,36 @@ class BaseConfig:
     __basedir__ = 'data/raw/'
     dataset_name = 'IDRiD'
     train_img_path = Path(__basedir__) / dataset_name / '1. Original Images/a. Training Set'
-    train_mask_path = Path(__basedir__) / dataset_name / '2. All Segmentation Groundtruths/a. Training Set/'
+    train_mask_path = Path(__basedir__) / dataset_name / '2. All Segmentation Groundtruths/a. Training Set'
     
-    lesion_type = 'SE'
+    lesion_type = 'EX'
     data_mode = 'binary' 
-    augmentation = 'medium' #options: normal, easy, medium, advanced
+    augmentation = 'advanced' #options: normal, easy, medium, advanced
     use_ben_transform = False #Good for vessel segmentation
-    scale_size = 256
-    data_type = 'tile'  #2 type of input format : whole image or tiles
+    scale_size = 1024
+    data_type = 'all'  #2 type of input format : whole image or tiles
 
     #Final
     finetune = False  # Traning only decoder
     num_epochs = 60
-    batch_size = 8
-    val_batch_size = 8
-    learning_rate = 1e-3
+    batch_size = 2
+    val_batch_size = 2
+    learning_rate = 1e-5
     learning_rate_decode = 1e-3
     weight_decay = 2.5e-5
-    is_fp16 = False
+    is_fp16 = True
 
     #first
-    model_name = "efficientnetb2_doubleunet"
-    model_params =  {"num_classes": 1, 
-                    "drop_rate": 0.2, 
-                    "pretrained": True, 
-                    "freeze_bn": False, 
-                    "freeze_backbone": False}
-
+    model_name = "sa_unet"
+    model_params= None
     #Choose at first and no need to change
-    metric = "auc_pr"
+    metric = "dice"
     mode = "max"
 
     #Second
     # https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou
     # Should we use IOU loss instead of Dice loss in this case ?
-    criterion = {"bce": 0.8, "log_dice": 0.2}
+    criterion = {"soft_bce": 0.8, 'symmetric_lovasz': 0.2}
     deep_supervision = False
     pos_weights = [200]
     optimizer = "madgrad"
@@ -62,10 +57,9 @@ class BaseConfig:
 
         return d
 
-
 class TestConfig(BaseConfig):
-    test_img_paths = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '1. Original Images/b. Testing Set'
-    test_mask_paths = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '2. All Segmentation Groundtruths/b. Testing Set'
+    test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '1. Original Images/b. Testing Set'
+    test_mask_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '2. All Segmentation Groundtruths/b. Testing Set'
     out_dir = 'outputs'
 
 

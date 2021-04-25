@@ -4,22 +4,16 @@
 
 from PIL import Image
 import numpy as np
-import os, sys
+import os
 import re
-import cv2
-import albumentations as A
 
 from .util import lesion_dict
+from ..data import NormalTransform
 
 def export_result(save_dir, test_config):
 	EPS = 1e-7
 
-	transform = A.Compose([
-		A.LongestMaxSize(test_config['scale_size']), 
-		A.PadIfNeeded(test_config['scale_size'], test_config['scale_size'], border_mode=cv2.BORDER_CONSTANT, value=0)]
-	)
-
-	gt_dir = test_config['test_mask_paths'] / lesion_dict[test_config['lesion_type']].dir_name
+	gt_dir = test_config['test_mask_path'] / lesion_dict[test_config['lesion_type']].dir_name
 	gt_dir = str(gt_dir)
 	
 	test_size=len(os.listdir(gt_dir))
@@ -35,32 +29,30 @@ def export_result(save_dir, test_config):
 	i=0
 	for image_path in os.listdir(gt_dir):
 		image_paths[i] = image_path
-		im_gt = Image.open(gt_dir+'/'+image_path)
-		arr_gt = np.array(im_gt)
+		im_gt = Image.open(gt_dir+'/'+image_path).convert('L')
+		im_gt = im_gt.point(lambda x: 255 if x > 0 else 0, '1')
+		arr_gt = np.asarray(im_gt).astype(np.uint8)
+
 		if test_config['data_type'] == 'all':
-			arr_gt = transform(image = arr_gt)['image']
+			transform = NormalTransform(test_config['scale_size'])
+			resize = transform.validation_transform()
+			arr_gt = resize(image = arr_gt)['image']
 
 		pred_image_path = re.sub('_' + test_config['lesion_type'] + '.tif', '.jpg', image_path)
 		im_pred = Image.open(pred_dir+'/'+pred_image_path)
+
 		if im_pred is None:
 			continue
+		
 		im_binary = im_pred.convert('1')
 		arr_pred = np.asarray(im_binary).astype(np.uint8)
-
-		if len(arr_gt.shape) > 2:
-			arr_gt = np.sum(arr_gt, axis=-1)
 
 		true_p = np.sum(arr_gt & arr_pred)
 		actual_p = np.sum(arr_gt)
 		pred_p = np.sum(arr_pred)
-		
 		false_p = pred_p - true_p
-		if test_config['data_type'] == 'all':
-			actual_n = test_config['scale_size']*test_config['scale_size'] - actual_p
-		else:
-			actual_n = im_gt.size[0]*im_gt.size[1] - actual_p
+		actual_n = im_gt.size[0]*im_gt.size[1] - actual_p
 		true_n = actual_n - false_p
-
 		union = actual_p + false_p
 
 		if actual_p == 0:

@@ -43,14 +43,14 @@ def get_model(params, model_name):
     model = getattr(smp, model_name)(
         **params
     )
-    if params['encoder_weights'] is None:
-        preprocessing_fn = smp.encoders.get_preprocessing_fn(
-            params['encoder_name'], "imagenet")
-    else:
-        preprocessing_fn = smp.encoders.get_preprocessing_fn(
-            params['encoder_name'], params['encoder_weights'])
+    # if params['encoder_weights'] is None:
+    #     preprocessing_fn = smp.encoders.get_preprocessing_fn(
+    #         params['encoder_name'], "imagenet")
+    # else:
+    #     preprocessing_fn = smp.encoders.get_preprocessing_fn(
+    #         params['encoder_name'], params['encoder_weights'])
 
-    return model, preprocessing_fn
+    return model
 
 def get_loader(
     images: List[Path],
@@ -149,18 +149,18 @@ def train_model(exp_name, configs, seed):
     # Get model
     use_smp = True
     if hasattr(smp, configs['model_name']):
-        model, preprocessing_fn = get_model(
+        model = get_model(
             configs['model_params'], configs['model_name'])
     elif configs['model_name'] == "TransUnet":
         from self_attention_cv.transunet import TransUnet
         model = TransUnet(**configs['model_params'])
-        preprocessing_fn = archs.get_preprocessing_fn(pretrained=None)
         use_smp=False
     else:
-        model, preprocessing_fn = archs.get_model(
+        model = archs.get_model(
             model_name=configs['model_name'], 
             params = configs['model_params'])
         use_smp = False
+    preprocessing_fn, _, _ = archs.get_preprocessing_fn(dataset_name=configs['dataset_name'])
 
     #Define transform (augemntation)
     Transform = get_transform(configs['augmentation'])
@@ -197,7 +197,7 @@ def train_model(exp_name, configs, seed):
         random_state=seed,
         batch_size=configs['batch_size'],
         val_batch_size=configs['val_batch_size'],
-        num_workers=2,
+        num_workers=0,
         train_transforms_fn=train_transform,
         valid_transforms_fn=val_transform,
         preprocessing_fn=preprocessing,
@@ -214,7 +214,7 @@ def train_model(exp_name, configs, seed):
             #Free all weights in the encoder of model
             for param in model.encoder.parameters():
                 param.requires_grad = False
-        if configs['encoder_weights'] is not None:
+        if configs['model_params']['encoder_weights'] is not None:
             bn_types = nn.BatchNorm2d
             #Disable batchnorm update
             for m in model.encoder.modules():
@@ -314,12 +314,12 @@ def train_model(exp_name, configs, seed):
     dice_scores = DiceCallback(
         input_key="mask",
         activation="Sigmoid",
-    threshold=0.5
+        threshold=0.5
     )
 
-    aucpr_scores = AucPRMetricCallback(
-        input_key="mask",
-    )
+    # aucpr_scores = AucPRMetricCallback(
+    #     input_key="mask",
+    # )
 
     # aucroc_scores = RocAucMetricCallback(
     #     input_key="mask",
@@ -339,7 +339,7 @@ def train_model(exp_name, configs, seed):
         json.dump(configs, f)
 
     callbacks += [hyper_callbacks, early_stopping,
-                  iou_scores, dice_scores, aucpr_scores, show_batches_1, logger]
+                  iou_scores, dice_scores, show_batches_1, logger]
 
     
     # class CustomRunner(dl.SupervisedRunner):

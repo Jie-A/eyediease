@@ -5,11 +5,11 @@ from pytorch_toolbelt.utils.random import set_manual_seed
 from datetime import datetime
 import argparse
 import logging
+import subprocess
 
 from src.main.config import BaseConfig, TestConfig
 from src.main.train import train_model
 from src.main.tta import *
-from src.main.aucpr import get_auc
 from src.main.stat_result import export_result
 
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +30,7 @@ def start_experiment(args):
     n_devices = torch.cuda.device_count()
     logging.info(f'Start using {n_devices} GPUs')
     exp_name = datetime.now().strftime("%b%d_%H_%M")
+    # exp_name = 'Apr24_12_31'
     logging.info(f'Performing experiment {exp_name}')
     os.environ['CUDA_VISIBLE_DEVICES']=','.join([str(i) for i in range(n_devices)])
     SEED = 1999
@@ -64,33 +65,34 @@ def start_experiment(args):
     else:
         tta_patches(logdir, configs, args)
 
-    logging.info("""
-    *************************************************************
-    *                                                           *
-    *                          AUC-PR                           *                               
-    *                                                           *
-    *************************************************************
-    """)
+    # logging.info("""
+    # *************************************************************
+    # *                                                           *
+    # *                          AUC-PR                           *                               
+    # *                                                           *
+    # *************************************************************
+    # """)
 
-    optimal_threshold, optimal_threshold_1 = get_auc(exp_name, configs)
-    logging.info(f"Optimal threshold is {optimal_threshold_1}")
+    # get_auc(exp_name, configs)
+    # optimal_threshold, optimal_threshold_1 = plot_aucpr_curve(exp_name, configs)
+    # logging.info(f"Optimal threshold is {optimal_threshold}")
 
-    logging.info("""
-    *************************************************************
-    *                                                           *
-    *                          BINARY MASK                      *                               
-    *                                                           *
-    *************************************************************
-    """)
-    args['createprob'] = 'false'
-    args['optim_thres'] = round(optimal_threshold_1, 3)
-    if configs['data_type'] == 'all':
-        test_tta(logdir, configs, args)
-    else:
-        tta_patches(logdir, configs, args)
+    # logging.info("""
+    # *************************************************************
+    # *                                                           *
+    # *                          BINARY MASK                      *                               
+    # *                                                           *
+    # *************************************************************
+    # """)
+    # args['createprob'] = 'false'
+    # args['optim_thres'] = round(optimal_threshold, 3)
+    # if configs['data_type'] == 'all':
+    #     test_tta(logdir, configs, args)
+    # else:
+    #     tta_patches(logdir, configs, args)
     
-    #@TODO
-    #Visualize predicted vs groundtruth 
+    # #@TODO
+    # #Visualize predicted vs groundtruth 
 
     logging.info("""
     *************************************************************
@@ -110,5 +112,8 @@ def start_experiment(args):
     """)
 
 if __name__ == '__main__':
+    subprocess.call(['wget', 'https://github.com/plotly/orca/releases/download/v1.2.1/orca-1.2.1-x86_64.AppImage', '-O', '/usr/local/bin/orca'])
+    subprocess.call(['chmod', '+x', '/usr/local/bin/orca'])
+    subprocess.call(['apt-get', 'install', 'xvfb', 'libgtk2.0-0', 'libgconf-2-4'])
     args = parse_arg()
     start_experiment(args)

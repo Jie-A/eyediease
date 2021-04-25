@@ -30,6 +30,8 @@ numba = "*"
 self-attention-cv = "*"
 notebook = "*"
 timm = "*"
+fastapi = "*"
+uvicorn = {extras = ["standard"], version = "*"}
 
 [dev-packages]
 autopep8 = "*"
