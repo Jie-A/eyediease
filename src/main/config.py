@@ -6,11 +6,21 @@ __all__ = ['BaseConfig', 'TestConfig']
 class BaseConfig:
     __basedir__ = 'data/raw/'
     dataset_name = 'IDRiD'
-    train_img_path = Path(__basedir__) / dataset_name / '1. Original Images/a. Training Set'
-    train_mask_path = Path(__basedir__) / dataset_name / '2. All Segmentation Groundtruths/a. Training Set'
-    
+    # train_img_path = (Path(__basedir__) / dataset_name /'DDR-dataset/lesion_segmentation' / 'train/img', \
+    #                 Path(__basedir__) / dataset_name /'DDR-dataset/lesion_segmentation' / 'valid/img')
+    # train_mask_path = (Path(__basedir__) / dataset_name / 'DDR-dataset/lesion_segmentation' / 'train/labelcol', \
+    #                 Path(__basedir__) / dataset_name / 'DDR-dataset/plesion_segmentation' / 'valid/labelcol')
+
+
+    train_img_path = Path(__basedir__) / dataset_name /  '1. Original Images' / 'a. Training Set'
+    train_mask_path = Path(__basedir__) / dataset_name / '2. All Segmentation Groundtruths' / 'a. Training Set'
+
+    # train_img_path = Path(__basedir__) / dataset_name / 'train/image'
+    # train_mask_path = Path(__basedir__) / dataset_name / 'train/mask'
+
     lesion_type = 'EX'
     data_mode = 'binary' 
+    gray = False
     augmentation = 'advanced' #options: normal, easy, medium, advanced
     use_ben_transform = False #Good for vessel segmentation
     scale_size = 1024
@@ -18,17 +28,51 @@ class BaseConfig:
 
     #Final
     finetune = False  # Traning only decoder
-    num_epochs = 60
+    num_epochs = 100
     batch_size = 2
     val_batch_size = 2
     learning_rate = 1e-5
     learning_rate_decode = 1e-3
-    weight_decay = 2.5e-5
+    weight_decay = 1e-5
     is_fp16 = True
 
     #first
-    model_name = "sa_unet"
-    model_params= None
+    # model_name = "transunet"
+    # model_params = {
+    #     'config': 'R50-ViT-B_16',
+    #     'img_size': 512,
+    #     'num_classes':1
+    # }
+    model_name = 'unetplusplusstar'
+    model_params = {
+        "classes": 1, 
+        "decoder_attention_type": "scse", 
+        "decoder_use_batchnorm": True, 
+        "encoder_depth": 5, 
+        "encoder_name": "BoTSER50",
+        "deep_supervision": True
+    }
+
+    # model_name = 'sa_unet'
+    # model_params = {'drop_prob': 0.18}
+
+#     model_name = "TransUnet"
+#     model_params = {
+#         "in_channels": 3, 
+#         "img_dim": 512, 
+#         "classes": 1, 
+#         "vit_blocks": 8, 
+#         "vit_dim_linear_mhsa_block": 1024
+#    }
+    # model_name = 'swin_tiny_attunet'
+    # model_params = {
+    #     'num_classes':1, 
+    #     'drop_rate':0.0,
+    #     'drop_block_rate': 0.2,
+    #     'pretrained':True, 
+    #     'freeze_bn':False, 
+    #     'freeze_backbone':False
+    # }
     #Choose at first and no need to change
     metric = "dice"
     mode = "max"
@@ -36,11 +80,14 @@ class BaseConfig:
     #Second
     # https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou
     # Should we use IOU loss instead of Dice loss in this case ?
-    criterion = {"soft_bce": 0.8, 'symmetric_lovasz': 0.2}
-    deep_supervision = False
-    pos_weights = [200]
-    optimizer = "madgrad"
-    scheduler = "simple"
+    criterion = {"bce": 0.8, 'log_jaccard':0.2}
+    deep_supervision = True
+    if deep_supervision:
+        criterion_ds = "bce"
+
+    pos_weights = [500]
+    optimizer = "adamw"
+    scheduler = "cosr"
 
     resume_path = None #Resume training
 
@@ -58,8 +105,12 @@ class BaseConfig:
         return d
 
 class TestConfig(BaseConfig):
-    test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '1. Original Images/b. Testing Set'
-    test_mask_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '2. All Segmentation Groundtruths/b. Testing Set'
+    # test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 'DDR-dataset/lesion_segmentation' /'test/img'
+    # test_mask_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 'DDR-dataset/lesion_segmentation' / 'test/labelcol'
+    test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '1. Original Images' / 'b. Testing Set'
+    test_mask_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '2. All Segmentation Groundtruths' / 'b. Testing Set'
+    # test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 'test/image'
+    # test_mask_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 'test/mask'
     out_dir = 'outputs'
 
 

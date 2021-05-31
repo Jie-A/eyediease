@@ -32,6 +32,10 @@ notebook = "*"
 timm = "*"
 fastapi = "*"
 uvicorn = {extras = ["standard"], version = "*"}
+python-multipart = "*"
+inplace-abn = "*"
+ml-collections = "*"
+einops = "*"
 
 [dev-packages]
 autopep8 = "*"

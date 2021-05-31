@@ -3,7 +3,7 @@ from pathlib import Path
 import collections
 import os
 import numpy as np
-from typing import List, Callable
+from typing import List, Callable, Union, Tuple
 from PIL import Image
 from catalyst.utils.distributed import (
     get_distributed_env,
@@ -26,12 +26,28 @@ lesion_dict = {
            project_name='HaemorrhageSegmentation'),
     'SE': Lesion(dir_name='4. Soft Exudates',
            project_name='SoftExudatesSegmentation'),
+    'MA_DDR': Lesion(dir_name='MA', project_name='DDRMicroaneurysmsSegmentation'),
+    'EX_DDR': Lesion(dir_name='EX', project_name='DDRHardExudatesSegmentation'),
+    'HE_DDR': Lesion(dir_name='HE', project_name='DDRHaemorrhageSegmentation'),
+    'SE_DDR': Lesion(dir_name='SE',project_name='DDRSoftExudatesSegmentation'),
     'OD': Lesion(dir_name='5. Optic Disc', project_name='OpticDiscSegmentation'),
     'EX_FGADR': Lesion(dir_name='HardExudate_Masks', project_name='FGADRHardExudatesSegmentation'),
     'HE_FGADR': Lesion(dir_name='Hemohedge_Masks', project_name='FGADRHaemorrhageSegmentation'),
     'SE_FGADR': Lesion(dir_name='SoftExudate_Masks', project_name='FGADRSoftExudatesSegmentation'),
-    'MA_FGADR': Lesion(dir_name='Microaneurysms_Masks', project_name='FGADRMicroaneurysmsSegmentation')
+    'MA_FGADR': Lesion(dir_name='Microaneurysms_Masks', project_name='FGADRMicroaneurysmsSegmentation'),
+    'Vessel_DRIVE': Lesion(dir_name='', project_name='DRIVE_VesselSegmentation'),
+    'Vessel_HRF': Lesion(dir_name='', project_name='HRF_VesselSegmentation'),
+    'Vessel_CHASEDB1': Lesion(dir_name='', project_name='CHASEDB1_VesselSegmentation')
 }
+
+def multigen(gen_func):
+    class _multigen(object):
+        def __init__(self, *args, **kwargs):
+            self.__args = args
+            self.__kwargs = kwargs
+        def __iter__(self):
+            return gen_func(*self.__args, **self.__kwargs)
+    return _multigen
 
 def make_grid(shape, window=256, min_overlap=32):
     """
@@ -63,24 +79,47 @@ def minmax_normalize(img, norm_range=(0, 1), orig_range=(0, 255)):
     return norm_img
     
 
-def get_datapath(img_path: Path, mask_path: Path, lesion_type: str = 'EX'):
-    lesion_path = lesion_dict[lesion_type].dir_name
-    img_posfix = '.jpg'
-    mask_posfix = '_' + lesion_type + '.tif'
-    mask_names = os.listdir(os.path.join(mask_path, lesion_path))
+def get_datapath(img_path: Union[Path, Tuple[Path]], mask_path: Union[Path, Tuple[Path]], lesion_type: str = 'EX'):
+    if lesion_type.split('_')[0] =='Vessel':
+        full_img_paths = list(img_path.glob('*.jpg'))
+        full_mask_paths = list(mask_path.glob('*.jpg'))
+        return sorted(full_img_paths), sorted(full_mask_paths)
 
-    mask_ids = list(map(lambda mask: re.sub(
-        mask_posfix, '', mask), mask_names))
+    if len(lesion_type.split('_')) == 1:
+        lesion_path = lesion_dict[lesion_type].dir_name
+        img_posfix = '.jpg'
+        mask_posfix = '_' + lesion_type + '.tif'
+        mask_names = os.listdir(os.path.join(mask_path, lesion_path))
 
-    restored_name = list(map(lambda x: x + img_posfix, mask_ids))
+        mask_ids = list(map(lambda mask: re.sub(
+            mask_posfix, '', mask), mask_names))
 
-    full_img_paths = list(
-        map(lambda x: Path(os.path.join(img_path, x)), restored_name))
-    full_mask_paths = list(
-        map(lambda x: Path(os.path.join(mask_path, lesion_path, x)), mask_names))
+        restored_name = list(map(lambda x: x + img_posfix, mask_ids))
+        full_img_paths = list(
+            map(lambda x: Path(os.path.join(img_path, x)), restored_name))
+        full_mask_paths = list(
+            map(lambda x: Path(os.path.join(mask_path, lesion_path, x)), mask_names))
+        return sorted(full_img_paths), sorted(full_mask_paths)
 
-    return sorted(full_img_paths), sorted(full_mask_paths)
+    if lesion_type.split('_')[1] == 'FGADR':
+        lesion_path = lesion_dict[lesion_type].dir_name
+        full_img_paths = list(img_path.glob('*.png'))
+        full_mask_paths = list((mask_path / lesion_path).glob('*.png'))
+        return sorted(full_img_paths), sorted(full_mask_paths)
 
+    if lesion_type.split('_')[1] == 'DDR':
+        lesion_path = lesion_dict[lesion_type].dir_name
+        if isinstance(img_path, tuple):
+            train_img = list(img_path[0].glob('*.jpg'))
+            train_mask = list((mask_path[0] / lesion_path).glob('*.tif'))
+
+            valid_img = list(img_path[1].glob('*.jpg'))
+            valid_mask = list((mask_path[1] / lesion_path).glob('*.tif'))
+            return (sorted(train_img), sorted(valid_img)), (sorted(train_mask), sorted(valid_mask))
+        else:
+            img = list(img_path.glob('*.jpg'))
+            mask = list((mask_path / lesion_path).glob('*.tif'))
+            return sorted(img), sorted(mask)
 
 def save_output(pred_masks: np.ndarray, out_path: Path):
     # Rescale to 0-255 and convert to uint8

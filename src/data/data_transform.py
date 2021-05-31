@@ -17,13 +17,13 @@ class BaseTransform(object):
         self.preprocessing_fn = preprocessing_fn
 
     def pre_transform(self):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def hard_transform(self):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def resize_transforms(self):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def _get_compose(self, transform):
         result = A.Compose([
@@ -59,6 +59,7 @@ class NormalTransform(BaseTransform):
             A.VerticalFlip(p=0.5),
             A.HorizontalFlip(p=0.5),
             A.RandomRotate90(p=0.7),
+            A.IAAAdditiveGaussianNoise()
         ]
     
     def resize_transforms(self):
@@ -130,6 +131,7 @@ class AdvancedTransform(NormalTransform):
                 A.OpticalDistortion(distort_limit=2, shift_limit=0.5),
                 ], p=0.0),
             A.ShiftScaleRotate(),
+            A.IAAAdditiveGaussianNoise()
         ])
 
 def crop_image_from_gray(img,tol=7):

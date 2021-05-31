@@ -12,7 +12,7 @@ from main.config import BaseConfig
 
 if __name__ == '__main__':
     # img_path = '../..' / BaseConfig.train_img_path
-    img_path = Path('../../data/raw/DDR/DDR-dataset/lesion_segmentation/train/image')
+    img_path = Path('../../data/processed/CHASEDB1/train/image')
     x_tot = []
     x2_tot = []
     for path in tqdm(list(img_path.glob('*.*'))):

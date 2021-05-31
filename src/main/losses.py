@@ -1,6 +1,7 @@
 from typing import Optional, Dict
 
 import torch
+import numpy as np
 import torch.nn.functional as F
 from pytorch_toolbelt.losses import *
 from torch import nn
@@ -99,7 +100,37 @@ class WeightedBCEWithLogits(nn.Module):
 
         return loss
 
+class TopKLoss(nn.Module):
+    def __init__(self, ignore_index: Optional[int] = -100, reduction="mean", topk=10):
+        super().__init__()
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+        self.topk = topk
+        
+    def forward(self, label_input: torch.Tensor, target: torch.Tensor):
+        if self.ignore_index is not None:
+            not_ignored_mask = (target != self.ignore_index).float()
 
+        copy_target = target.int()
+        fore_ground = copy_target.detach().cpu() == 1
+        back_ground = copy_target.detach().cpu() == 0
+
+        fg_loss = nn.BCEWithLogitsLoss(reduction='none')(label_input[fore_ground], target[fore_ground])
+        bg_loss = nn.BCEWithLogitsLoss(reduction='none')(label_input[back_ground], target[back_ground])
+        topkloss, _ = torch.topk(bg_loss, int(torch.sum(fore_ground)), largest=True, sorted=False)
+        beta = int(torch.sum(back_ground)*self.topk / 100) / (int(torch.sum(back_ground)*self.topk / 100) + torch.sum(fore_ground))
+        # beta=1/2
+        if self.reduction == "mean":
+            loss = beta*fg_loss.mean() + (1-beta)*topkloss.mean()
+
+        if self.reduction == "sum":
+            loss = beta*fg_loss.sum() + (1-beta)*topkloss.sum()
+
+        if self.ignore_index is not None:
+            loss = loss * not_ignored_mask.float()
+
+        return loss
+    
 class KLDivLossWithLogits(KLDivLoss):
     """
     """
@@ -126,15 +157,53 @@ class SymmetricLovasz(nn.Module):
     def forward(self, outputs, targets):
         return 0.5*(lovasz_hinge(outputs, targets) + lovasz_hinge(-outputs, 1.0 - targets))
 
+class LogBCE(nn.Module):
+    def __init__(self, ignore_index=None, reduction='mean', smooth_factor=0.1):
+        super(LogBCE, self).__init__()
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+        self.smooth_factor = smooth_factor
+
+    def forward(self, inputs, targets):
+        with torch.no_grad():
+            beta = targets.mean(dim=[2, 3], keepdims=True)
+
+        if self.smooth_factor is not None:
+            soft_targets = ((1 - targets) * self.smooth_factor + targets * (1 - self.smooth_factor)).type_as(inputs)
+        else:
+            soft_targets = targets.type_as(inputs)
+
+        logits_1 = F.logsigmoid(inputs)
+        logits_2 = F.logsigmoid(-inputs)
+        loss = -(1-beta)*logits_1*soft_targets - beta*logits_2*(1-soft_targets)
+
+        if self.ignore_index is not None:
+            not_ignored_mask = targets != self.ignore_index
+            loss *= not_ignored_mask.type_as(loss)
+
+        if self.reduction == "mean":
+            loss = loss.mean()
+
+        if self.reduction == "sum":
+            loss = loss.sum()
+
+        return loss
+
 def get_loss(loss_name: str, ignore_index=None):
     if loss_name.lower() == "kl":
         return KLDivLossWithLogits()
+    
+    if loss_name.lower() == "topk":
+        return TopKLoss(ignore_index=ignore_index)
 
     if loss_name.lower() == "bce":
         return SoftBCEWithLogitsLoss(ignore_index=ignore_index)
 
     if loss_name.lower() == 'wbce':
         return WeightedBCEWithLogits(ignore_index=ignore_index)
+
+    if loss_name.lower() == 'log_bce':
+        return LogBCE(ignore_index=ignore_index)
 
     if loss_name.lower() == "ce":
         return nn.CrossEntropyLoss()

@@ -42,6 +42,17 @@ def show_random(images: List[Path], masks: List[Path], transforms=None) -> None:
     index = random.randint(0, length - 1)
     show(index, images, masks, transforms)
 
+def overlay_image_mask(image, mask, mask_color=(0,255,0), alpha=1.0):
+    im_f= image.astype(np.float32)
+#     if mask.ndim == 2:
+#         mask = np.expand_dims(mask,-1)        
+    mask_col = np.expand_dims(np.array(mask_color)/255.0, axis=(0,1))
+    return (im_f + alpha * mask * (np.mean(0.8 * im_f + 0.2 * 255, axis=2, keepdims=True) * mask_col - im_f)).astype(np.uint8)
+
+
+def overlay_image_mask_original(image, mask, mask_color=(0,255,0), alpha=1.0):
+    return  np.concatenate((image, overlay_image_mask(image, mask)), axis=1)
+
 def overlay_mask_image(
     image: Path, 
     groundtruth: Path,
@@ -93,10 +104,18 @@ if __name__ == '__main__':
     import sys
     sys.path.append('..')
     from main.config import TestConfig
-    from main.util.base_utils import lesion_dict
-    overlay_mask_image(
-        '../..' / TestConfig.test_img_path, 
-        '../..'/ TestConfig.test_mask_path / lesion_dict['SE'].dir_name, 
-        Path('../../outputs/IDRiD/tta/SE/Apr21_18_47'),
-        lesion_type='SE',
-        is_save=True)
+    # from main.util.base_utils import lesion_dict
+    # overlay_mask_image(
+    #     '../..' / TestConfig.test_img_path, 
+    #     '../..'/ TestConfig.test_mask_path / lesion_dict['SE'].dir_name, 
+    #     Path('../../outputs/IDRiD/tta/SE/Apr21_18_47'),
+    #     lesion_type='SE',
+    #     is_save=True)
+
+    img = cv2.imread(str('../..' / TestConfig.test_img_path/'IDRiD_55.jpg'), cv2.IMREAD_COLOR)
+    true_mask = cv2.imread(str('../../data/raw/IDRiD/2. All Segmentation Groundtruths/b. Testing Set/3. Hard Exudates/IDRiD_55_EX.tif'), cv2.IMREAD_COLOR) 
+    # true_mask = true_mask / true_mask.max()
+    # true_mask = true_mask.astype(np.uint8)
+
+    overlay_img = overlay_image_mask(img, true_mask)
+    cv2.imwrite('test.jpg', overlay_img)

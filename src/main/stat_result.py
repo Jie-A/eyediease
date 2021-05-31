@@ -38,7 +38,10 @@ def export_result(save_dir, test_config):
 			resize = transform.validation_transform()
 			arr_gt = resize(image = arr_gt)['image']
 
-		pred_image_path = re.sub('_' + test_config['lesion_type'] + '.tif', '.jpg', image_path)
+		if test_config['dataset_name'] == 'IDRiD':
+			pred_image_path = re.sub('_' + test_config['lesion_type'] + '.tif', '.jpg', image_path)
+		else:
+			pred_image_path = re.sub('.tif', '.jpg', image_path)
 		im_pred = Image.open(pred_dir+'/'+pred_image_path)
 
 		if im_pred is None:
@@ -99,5 +102,5 @@ def export_result(save_dir, test_config):
 	np.savetxt(f"{save_dir}/sp.csv", sp_csv, delimiter=",", fmt="%s")
 	np.savetxt(f"{save_dir}/iou.csv", iou_csv, delimiter=",", fmt="%s")
 	np.savetxt(f"{save_dir}/dice.csv", dice_csv, delimiter=",", fmt="%s")
-
+	
 	print(f'Results are saved at {save_dir}')

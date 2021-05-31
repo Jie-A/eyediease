@@ -3,8 +3,10 @@
 """
 from sklearn.model_selection import train_test_split
 import numpy as np
+import pandas as pd
 import segmentation_models_pytorch as smp
 import torch
+import torch.nn.functional as F
 from torch.optim.lr_scheduler import CyclicLR, ReduceLROnPlateau
 from torch.utils.data import DataLoader
 import torch.nn as nn
@@ -12,29 +14,28 @@ from pytorch_toolbelt.utils.catalyst import (
     HyperParametersCallback,
     draw_binary_segmentation_predictions,
     ShowPolarBatchesCallback,
-    RocAucMetricCallback
 )
 from catalyst.contrib.nn import OneCycleLRWithWarmup
-from catalyst import dl
+from catalyst import dl, metrics
 from catalyst.contrib.callbacks.wandb_logger import WandbLogger
 from catalyst.dl import SupervisedRunner, CriterionCallback, EarlyStoppingCallback, SchedulerCallback, MetricAggregationCallback, IouCallback, DiceCallback
 from catalyst import utils
 from functools import partial
 from collections import OrderedDict
 from pathlib import Path
-from typing import List
+from typing import List, Union, Tuple
 import os
 import json
 import logging
 logging.basicConfig(level=logging.INFO, format='')
 
 from . import util
-from .util import lesion_dict, AucPRMetricCallback
+from .util import lesion_dict
 from ..data import *
 from .scheduler import get_scheduler
 from .optim import get_optimizer
 from .losses import get_loss, WeightedBCEWithLogits
-from ..data import OneLesionSegmentation, MultiLesionSegmentation, CLASS_COLORS, CLASS_NAMES
+from ..data import  OneLesionSegmentation, CLASS_COLORS, CLASS_NAMES
 from . import archs
 
 def get_model(params, model_name):
@@ -43,19 +44,14 @@ def get_model(params, model_name):
     model = getattr(smp, model_name)(
         **params
     )
-    # if params['encoder_weights'] is None:
-    #     preprocessing_fn = smp.encoders.get_preprocessing_fn(
-    #         params['encoder_name'], "imagenet")
-    # else:
-    #     preprocessing_fn = smp.encoders.get_preprocessing_fn(
-    #         params['encoder_name'], params['encoder_weights'])
 
     return model
 
 def get_loader(
-    images: List[Path],
-    mask_dir: str,
+    images: Union[List[Path], Tuple[List[Path]]],
+    is_gray: bool,
     random_state: int,
+    masks: Union[List[Path], Tuple[List[Path]]] = None,
     valid_size: float = 0.2,
     batch_size: int = 4,
     val_batch_size: int = 8,
@@ -64,23 +60,59 @@ def get_loader(
     valid_transforms_fn=None,
     preprocessing_fn=None,
     ben_method = None,
-    masks: List[Path] = None,
     mode='binary',
     data_type = 'tile'
-):
-    indices = np.arange(len(images))
+):  
+    if isinstance(images, List):
+        if data_type == 'all':
+            indices = np.arange(len(images))
 
-    train_indices, valid_indices = train_test_split(
-        indices, test_size=valid_size, random_state=random_state, shuffle=True)
+            train_indices, valid_indices = train_test_split(
+                indices, test_size=valid_size, random_state=random_state, shuffle=True)
 
-    np_images = np.array(images)
-
+            np_images = np.array(images)
+            train_imgs = np_images[train_indices].tolist()
+            valid_imgs = np_images[valid_indices].tolist()
+        else:
+            train_df = pd.read_csv('data/processed/IDRiD/train/EX/img_mask.csv')
+            train_df = train_df.sample(frac=1).reset_index(drop=True)
+            train_imgs= train_df.loc[:, 'img'].values.tolist()
+            train_imgs = [Path('/'.join(list(Path(path).parts[2:])) + '/') for path in train_imgs]
+            train_masks = train_df.loc[:, 'mask'].values.tolist()
+            train_masks = [Path('/'.join(list(Path(path).parts[2:])) + '/') for path in train_masks]
+            
+            val_df = pd.read_csv('data/processed/IDRiD/val/EX/img_mask.csv')
+            val_df = val_df.sample(frac=1).reset_index(drop=True)
+            valid_imgs= val_df.loc[:, 'img'].values.tolist()
+            valid_imgs = [Path('/'.join(list(Path(path).parts[2:])) + '/') for path in valid_imgs]
+            valid_masks = val_df.loc[:, 'mask'].values.tolist()
+            valid_masks = [Path('/'.join(list(Path(path).parts[2:])) + '/') for path in valid_masks]
+    else:
+        if data_type == 'all':
+            train_imgs = images[0]
+            valid_imgs = images[1]
+        else:
+            pass
+        
     if mode == 'binary':
-        np_masks = np.array(masks)
-
+        if isinstance(masks, List):
+            if data_type == 'all':
+                np_masks = np.array(masks)
+                train_masks = np_masks[train_indices].tolist()
+                valid_masks = np_masks[valid_indices].tolist()
+            else:
+                pass
+        else:
+            if data_type == 'all':
+                train_masks = masks[0]
+                valid_masks = masks[1]
+            else:
+                pass
+            
         train_dataset = OneLesionSegmentation(
-            np_images[train_indices].tolist(),
-            masks=np_masks[train_indices].tolist(),
+            train_imgs,
+            is_gray,
+            masks=train_masks,
             transform=train_transforms_fn,
             preprocessing_fn=preprocessing_fn,
             ben_transform = ben_method,
@@ -88,28 +120,13 @@ def get_loader(
         )
 
         valid_dataset = OneLesionSegmentation(
-            np_images[valid_indices].tolist(),
-            masks=np_masks[valid_indices].tolist(),
+            valid_imgs,
+            is_gray,
+            masks=valid_masks,
             transform=valid_transforms_fn,
             preprocessing_fn=preprocessing_fn,
             ben_transform = ben_method,
             data_type = data_type
-        )
-    else:
-        train_dataset = MultiLesionSegmentation(
-            np_images[train_indices].tolist(),
-            mask_dir=mask_dir,
-            transform=train_transforms_fn,
-            ben_transform = ben_method,
-            preprocessing_fn=preprocessing_fn
-        )
-
-        valid_dataset = MultiLesionSegmentation(
-            np_images[valid_indices].tolist(),
-            mask_dir=mask_dir,
-            transform=valid_transforms_fn,
-            ben_transform = ben_method,
-            preprocessing_fn=preprocessing_fn
         )
 
     train_loader = DataLoader(
@@ -160,7 +177,7 @@ def train_model(exp_name, configs, seed):
             model_name=configs['model_name'], 
             params = configs['model_params'])
         use_smp = False
-    preprocessing_fn, _, _ = archs.get_preprocessing_fn(dataset_name=configs['dataset_name'])
+    preprocessing_fn, mean, std = archs.get_preprocessing_fn(dataset_name=configs['dataset_name'], grayscale=configs['gray'])
 
     #Define transform (augemntation)
     Transform = get_transform(configs['augmentation'])
@@ -190,10 +207,11 @@ def train_model(exp_name, configs, seed):
         ben_transform = load_ben_color
     else:
         ben_transform = None
+
     loader, log_info = get_loader(
         images=ex_dirs,
+        is_gray=configs['gray'],
         masks=mask_dirs,
-        mask_dir=TRAIN_MASK_DIRS,
         random_state=seed,
         batch_size=configs['batch_size'],
         val_batch_size=configs['val_batch_size'],
@@ -221,21 +239,26 @@ def train_model(exp_name, configs, seed):
                 if isinstance(m, bn_types):
                     m.eval()
 
-    param_group = []
-    if hasattr(model, 'encoder'):
-        encoder_params = filter(lambda p: p.requires_grad, model.encoder.parameters())
-        param_group += [{'params': encoder_params, 'lr': configs['learning_rate']}]        
-    if hasattr(model, 'decoder'):
-        decoder_params = filter(lambda p: p.requires_grad, model.decoder.parameters())
-        param_group += [{'params': decoder_params}]        
-    if hasattr(model, 'segmentation_head'):
-        head_params = filter(lambda p: p.requires_grad, model.segmentation_head.parameters())
-        param_group += [{'params': head_params}]        
-    if len(param_group) == 0:
-        param_group = [{'params': filter(lambda p: p.requires_grad, model.parameters())}]
+    param_group = model.get_paramgroup(configs['learning_rate_decode'])
+    trainable, total = model.get_num_parameters()
+    # param_group = []
+    # if hasattr(model, 'encoder'):
+    #     encoder_params = filter(lambda p: p.requires_grad, model.encoder.parameters())
+    #     param_group += [{'params': encoder_params, 'lr': configs['learning_rate']}]        
+    # if hasattr(model, 'decoder'):
+    #     decoder_params = filter(lambda p: p.requires_grad, model.decoder.parameters())
+    #     param_group += [{'params': decoder_params}]        
+    # if hasattr(model, 'segmentation_head'):
+    #     head_params = filter(lambda p: p.requires_grad, model.segmentation_head.parameters())
+    #     param_group += [{'params': head_params}]        
+    # if hasattr(model, 'supervision'):
+    #     deep_params = filter(lambda p: p.requires_grad, model.supervision.parameters())
+    #     param_group += [{'params': deep_params}]        
+    # if len(param_group) == 0:
+    #     param_group = [{'params': filter(lambda p: p.requires_grad, model.parameters())}]
 
-    total = int(sum(p.numel() for p in model.parameters()))
-    trainable = int(sum(p.numel() for p in model.parameters() if p.requires_grad))
+    # total = int(sum(p.numel() for p in model.parameters()))
+    # trainable = int(sum(p.numel() for p in model.parameters() if p.requires_grad))
     count_parameters = {"total": total, "trainable": trainable}
 
     logging.info(
@@ -288,8 +311,9 @@ def train_model(exp_name, configs, seed):
     hyper_callbacks = HyperParametersCallback(configs)
 
     if configs['data_mode'] == 'binary':
+        image_format = 'gray' if configs['gray'] else 'rgb'
         visualize_predictions = partial(
-            draw_binary_segmentation_predictions, image_key="image", targets_key="mask"
+            draw_binary_segmentation_predictions, image_key="image", targets_key="mask", mean=mean, std=std, image_format=image_format
         )
     # elif configs['data_mode'] == 'multilabel':
     #     visualize_predictions = partial(
@@ -303,7 +327,7 @@ def train_model(exp_name, configs, seed):
     #     visualize_predictions, metric="loss", minimize=True)
 
     early_stopping = EarlyStoppingCallback(
-        patience=10, metric=configs['metric'], minimize=False)
+        patience=20, metric=configs['metric'], minimize=False)
 
     iou_scores = IouCallback(
         input_key="mask",
@@ -325,12 +349,21 @@ def train_model(exp_name, configs, seed):
     #     input_key="mask",
     # )
     #End define
+    # if configs['resume'] is not None:
+    #     exp_name = configs['resume'].split(os.path.sep)[-3]
 
     prefix = f"{configs['lesion_type']}/{exp_name}"
     log_dir = os.path.join("models/", configs['dataset_name'], prefix)
-    os.makedirs(log_dir, exist_ok=False)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    # if configs['kfold']:
+    #     logger = WandbLogger(project=lesion_dict[configs['lesion_type']].project_name,
+    #                      name=)
+
     logger = WandbLogger(project=lesion_dict[configs['lesion_type']].project_name,
                          name=exp_name)
+
 
     #Save config as JSON format
     with open(os.path.join(log_dir, 'config.json'), 'w') as f:
@@ -349,28 +382,128 @@ def train_model(exp_name, configs, seed):
     #         y_pred = self.model(x)
     #         pass
 
-    # model training
-    runner = SupervisedRunner(
-        device=utils.get_device(), input_key="image", input_target_key="mask")
-
     if configs['is_fp16']:
         fp16_params = dict(amp=True)  # params for FP16
     else:
         fp16_params = None
+        
+    # model training
+    if not configs['deep_supervision']:
+        runner = SupervisedRunner(
+            device=utils.get_device(), input_key="image", input_target_key="mask")
 
-    runner.train(
-        model=model,
-        criterion=criterion,
-        optimizer=optimizer,
-        callbacks=callbacks,
-        logdir=log_dir,
-        loaders=loader,
-        num_epochs=configs['num_epochs'],
-        scheduler=scheduler,
-        main_metric=configs['metric'],
-        minimize_metric=False,
-        timeit=True,
-        fp16=fp16_params,
-        resume=configs['resume_path'],
-        verbose=True,
-    )
+        runner.train(
+            model=model,
+            criterion=criterion,
+            optimizer=optimizer,
+            callbacks=callbacks,
+            logdir=log_dir,
+            loaders=loader,
+            num_epochs=configs['num_epochs'],
+            scheduler=scheduler,
+            main_metric=configs['metric'],
+            minimize_metric=False,
+            timeit=True,
+            fp16=fp16_params,
+            resume=configs['resume_path'],
+            verbose=True,
+        )
+    else:
+        callbacks = []
+        if isinstance(scheduler, (CyclicLR, OneCycleLRWithWarmup)):
+            callbacks += [SchedulerCallback(mode="batch")]
+        elif isinstance(scheduler, (ReduceLROnPlateau)):
+            callbacks += [SchedulerCallback(reduced_metric=configs['metric'])]
+
+        hyper_callbacks = HyperParametersCallback(configs)
+
+        optim_cb =  dl.OptimizerCallback(
+                    metric_key="loss",    
+                    accumulation_steps=1,  
+                    grad_clip_params=None
+                )
+        
+        callbacks += [optim_cb, hyper_callbacks, early_stopping, logger]
+
+        def get_pyramid(mask: torch.Tensor, height, shape_list, include_final_mask=False):
+            with torch.no_grad():
+                if include_final_mask:
+                    masks = [mask]
+                    big_mask = masks[-1]
+                else:
+                    masks = []
+                    big_mask = mask
+                for _, shape in zip(range(height), shape_list):
+                    small_mask = F.adaptive_avg_pool2d(big_mask, shape)
+                    masks.append(small_mask)
+                    big_mask = masks[-1]
+
+                targets = []
+                for mask in masks:
+                    targets.append(mask)
+
+            return targets
+
+        class CustomRunner(dl.Runner):
+            def _handle_batch(self, batch):
+                results = batch
+                x = results['image']
+                y = results['mask']
+                y_hat, y_hat_levels = self.model(x)
+                shape_list =[]
+                for level in y_hat_levels:
+                    shape_list.append(np.array(level.shape[2:]).tolist())
+
+                targets = get_pyramid(y, len(y_hat_levels), shape_list, False)
+                loss_levels = []
+
+                criterion_ds = get_loss(configs['criterion_ds'])
+                for y_hat_level, target in zip(y_hat_levels, targets):
+                    loss_levels.append(criterion_ds(y_hat_level, target))
+
+                loss_final = None  
+                loss_com = {}
+                for loss_name, loss_weight in configs['criterion'].items():
+                    loss_com['loss_' + loss_name] = criterion[loss_name](y_hat, y) 
+                    if loss_final is None:
+                        loss_final = criterion[loss_name](y_hat, y)*float(loss_weight)
+                    else:
+                        loss_final += criterion[loss_name](y_hat,y)*float(loss_weight)
+
+                loss_deep_super = torch.sum(torch.stack(loss_levels))
+                loss = loss_final + loss_deep_super
+
+                target = y
+                pred = torch.sigmoid(y_hat)
+                dice  = metrics.dice(pred, target, threshold=0.5).mean()
+                iou = metrics.iou(pred, target, threshold=0.5).mean()
+
+                self.batch_metrics = {
+                    'loss': loss,
+                    'dice': dice,
+                    'iou': iou
+                }
+
+                for key in loss_com:
+                    self.batch_metrics[key] = loss_com[key]
+            
+        runner = CustomRunner(device = utils.get_device())
+        runner.train(
+            model=model,
+            optimizer=optimizer,
+            callbacks=callbacks,
+            logdir=log_dir,
+            loaders=loader,
+            num_epochs=configs['num_epochs'],
+            scheduler=scheduler,
+            main_metric=configs['metric'],
+            minimize_metric=False,
+            timeit=True,
+            fp16=fp16_params,
+            resume=configs['resume_path'],
+            verbose=True,
+        )
+
+def run_cross_validation(fold):
+    #@TODO Not doing yet because training with cross validation take so much time 
+    pass

@@ -183,54 +183,46 @@ def get_optimizer(
     optimizer_name: str, parameters, learning_rate: float, weight_decay=1e-5, eps=1e-5, **kwargs
 ) -> Optimizer:
     from torch.optim import SGD, Adam, RMSprop, AdamW
-    from torch_optimizer import RAdam, Lamb, DiffGrad, NovoGrad, Ranger
+    from torch_optimizer import RAdam, Lamb, DiffGrad, NovoGrad, Lookahead, Ranger
+
+    lookahead = False
+    if len(optimizer_name.split('_')) > 1:
+        optimizer_name = optimizer_name.split('_')[0]
+        lookahead=True
 
     if optimizer_name.lower() == "sgd":
-        return SGD(parameters, learning_rate, momentum=0.9, nesterov=True, weight_decay=weight_decay, **kwargs)
+        base_optim =  SGD(parameters, learning_rate, momentum=0.9, nesterov=True, weight_decay=weight_decay, **kwargs)
 
     if optimizer_name.lower() == "adam":
         # As Jeremy suggests
-        return Adam(parameters, learning_rate, weight_decay=weight_decay, eps=eps, **kwargs)
+        base_optim = Adam(parameters, learning_rate, weight_decay=weight_decay, eps=eps, **kwargs)
 
     if optimizer_name.lower() == "rms":
-        return RMSprop(parameters, learning_rate, weight_decay=weight_decay, **kwargs)
+        base_optim = RMSprop(parameters, learning_rate, weight_decay=weight_decay, **kwargs)
 
     if optimizer_name.lower() == "adamw":
-        return AdamW(parameters, learning_rate, weight_decay=weight_decay, eps=eps, **kwargs)
+        base_optim =  AdamW(parameters, learning_rate, weight_decay=weight_decay, eps=eps, **kwargs)
 
     if optimizer_name.lower() == "radam":
         # As Jeremy suggests
-        return RAdam(parameters, learning_rate, weight_decay=weight_decay, eps=eps, **kwargs)
+        base_optim =  RAdam(parameters, learning_rate, weight_decay=weight_decay, eps=eps, **kwargs)
 
     # Optimizers from torch-optimizer
     if optimizer_name.lower() == "ranger":
-        return Ranger(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
+        base_optim = Ranger(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
 
     if optimizer_name.lower() == "lamb":
-        return Lamb(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
+        base_optim =  Lamb(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
 
     if optimizer_name.lower() == "diffgrad":
-        return DiffGrad(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
+        base_optim = DiffGrad(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
 
     if optimizer_name.lower() == "novograd":
-        return NovoGrad(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
+        base_optim = NovoGrad(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
 
     if optimizer_name.lower() == "madgrad":
-        return MADGRAD(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
-    # # Optimizers from Apex (Fused version is faster on GPU with tensor cores)
-    # if optimizer_name.lower() == "fused_lamb":
-    #     from apex.optimizers import FusedLAMB
-
-    #     return FusedLAMB(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
-
-    # if optimizer_name.lower() == "fused_sgd":
-    #     from apex.optimizers import FusedSGD
-
-    #     return FusedSGD(parameters, learning_rate, momentum=0.9, nesterov=True, weight_decay=weight_decay, **kwargs)
-
-    # if optimizer_name.lower() == "fused_adam":
-    #     from apex.optimizers import FusedAdam
-
-    #     return FusedAdam(parameters, learning_rate, eps=eps, weight_decay=weight_decay, adam_w_mode=True, **kwargs)
-
-    raise ValueError("Unsupported optimizer name " + optimizer_name)
+        base_optim = MADGRAD(parameters, learning_rate, eps=eps, weight_decay=weight_decay, **kwargs)
+    
+    if lookahead:
+        return Lookahead(base_optim)
+    return base_optim

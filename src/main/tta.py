@@ -30,7 +30,7 @@ import re
 from .aucpr import get_auc, plot_aucpr_curve
 from ..data import NormalTransform
 from ..data import TestSegmentation
-from .util import lesion_dict, get_datapath, make_grid, save_output as so
+from .util import lesion_dict, get_datapath, make_grid, multigen ,save_output as so
 from . import archs
 
 import logging
@@ -67,17 +67,18 @@ def test_tta(logdir, config, args):
     else:
         model = archs.get_model(
             model_name=config['model_name'], 
-            params = config['model_params'])
+            params = config['model_params'],
+            training=False)
             
-    preprocessing_fn, mean, std = archs.get_preprocessing_fn(dataset_name=config['dataset_name'])
+    preprocessing_fn, mean, std = archs.get_preprocessing_fn(dataset_name=config['dataset_name'], grayscale=config['gray'])
 
     transform = NormalTransform(config['scale_size'])
     augmentation = transform.resize_transforms() + [A.Lambda(image=preprocessing_fn), ToTensorV2()]
 
     test_transform = A.Compose(augmentation)
 
-    test_ds = TestSegmentation(img_paths, mask_paths, transform=test_transform)
-    test_loader = DataLoader(test_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=True)
+    test_ds = TestSegmentation(img_paths, config['gray'], mask_paths, transform=test_transform)
+    test_loader = DataLoader(test_ds, batch_size=config['val_batch_size'], num_workers=2, pin_memory=True, shuffle=True)
 
     checkpoints = torch.load(f"{logdir}/checkpoints/{'best' if str_2_bool(args['best']) else 'last'}.pth")
     model.load_state_dict(checkpoints['model_state_dict'])
@@ -95,54 +96,35 @@ def test_tta(logdir, config, args):
         model = tta.SegmentationTTAWrapper(
             model, tta_transform(), merge_mode="mean")
     
-    tta_predictions = []
-    gt_masks = []
-    filenames = []
     # this get predictions for the whole loader
-    with torch.no_grad():
-        for batch in test_loader:
-            pred = model(batch['image'].to('cuda'))
-            pred = pred.detach().cpu()
-            pred = torch.sigmoid(pred)[0]
-            pred = pred.squeeze(dim=0).numpy()
-            tta_predictions.append(pred)
-            gt_masks.append(batch['mask'][0].numpy())
-            filenames.append(batch['filename'][0])
-    
-    # for i, (image_path, probs) in tqdm(enumerate(zip(TEST_IMAGES, tta_predictions))):
-    #     image_name = image_path.name
-    #     mask_arr = probs.astype('float32')
+    @multigen
+    def predict_generator():
+        with torch.no_grad():
+            for batch in tqdm(test_loader):
+                pred = model(batch['image'].to('cuda'))
+                pred = pred.detach().cpu()
+                pred = torch.sigmoid(pred)
+                pred = pred.float().numpy()
+                for i in range(len(batch['image'])):
+                    yield pred[i][0], batch['mask'][i].numpy(), batch['filename'][i]
 
-    #     assert str(mask_arr.dtype) == 'float32'
-    #     out_path = Path(config['out_dir']) / config['dataset_name'] / 'tta' / \
-    #         config['lesion_type'] / 'prob_image' / Path(logdir).name
-        
-    #     if not os.path.isdir(out_path):
-    #         os.makedirs(out_path, exist_ok=True)
-
-    #     out_name = out_path / image_name
-
-    #     predicted_save = Image.fromarray(
-    #         (mask_arr*255).astype('uint8'))
-    #     predicted_save.save(out_name, "JPEG", quality=100)
-    #     print(f'Saved {image_name} to {str(out_path)}')
     logging.info('====> Estimate auc-pr score')
-    mean_auc = get_auc(gt_masks, tta_predictions, config)
+    mean_auc = get_auc(predict_generator(), config)
     logging.info(f'MEAN-AUC {mean_auc}')
     logging.info('====> Find optimal threshold from 0 to 1 w.r.t auc-pr curve')
-    optim_thres1, optim_thres2 = plot_aucpr_curve(
-                                                gt_masks, 
-                                                tta_predictions, 
+    optim_thres1, optim_thres2, optim_thres3 = plot_aucpr_curve(
+                                                predict_generator(),
                                                 Path(logdir).name, 
                                                 config)
     
-    logging.info(f"Optimal threshold is {optim_thres1}")
+    logging.info(f"Optimal threshold is {optim_thres3}")
     logging.info('====> Output binary mask base on optimal threshold value')
     # prob_dir =  Path(config['out_dir']) / config['dataset_name'] / 'tta' / \
     #         config['lesion_type'] / 'prob_image' / Path(logdir).name
     # threshold = args['optim_thres']  # Need to choose best threshold
-    for mask_name, pred_mask in tqdm(zip(filenames, tta_predictions)):
-        mask = (pred_mask > optim_thres1).astype(np.uint8)
+    for pred_mask, _, mask_name in tqdm(predict_generator()):
+        mask = (pred_mask > optim_thres3).astype(np.uint8)
+        # print('Mask shape', mask.shape)
         out_path = Path(config['out_dir']) / config['dataset_name'] / 'tta' / \
             config['lesion_type'] / Path(logdir).name
         if not os.path.isdir(out_path):
@@ -151,8 +133,6 @@ def test_tta(logdir, config, args):
         out_name = out_path / mask_name
         so(mask, out_name)  # PIL Image format
 
-    del gt_masks, tta_predictions, filenames
-    gc.collect()
     logging.info('====> Finishing inference')
 
 def tta_patches(logdir, config, args):
@@ -169,8 +149,9 @@ def tta_patches(logdir, config, args):
     else:
         model = archs.get_model(
             model_name=config['model_name'], 
-            params = config['model_params'])
-    preprocessing_fn, _, _ = archs.get_preprocessing_fn(dataset_name=config['dataset_name'])
+            params = config['model_params'], 
+            training=False)
+    preprocessing_fn, _, _ = archs.get_preprocessing_fn(dataset_name=config['dataset_name'], grayscale=config['gray'])
     
     checkpoints = torch.load(f"{logdir}/checkpoints/{'best' if str_2_bool(args['best']) else 'last'}.pth")
     model.load_state_dict(checkpoints['model_state_dict'])
@@ -193,52 +174,44 @@ def tta_patches(logdir, config, args):
         ToTensorV2()
     ])
 
-    tta_predictions = []
-    filenames = []
-    for mask_path in tqdm(TEST_MASKS):
-        img = test_img_dir / re.sub('_' + config['lesion_type'] + '.tif', '.jpg', mask_path.name)
-        with rasterio.open(img.as_posix(), transform=rasterio.Affine(1, 0, 0, 0, 1, 0)) as dataset:
-            slices = make_grid(dataset.shape, window=512, min_overlap=32)
-            preds = np.zeros(dataset.shape, dtype=np.float32)
+    def predict_generator():
+        for mask_path in tqdm(TEST_MASKS):
+            img = test_img_dir / re.sub('_' + config['lesion_type'] + '.tif', '.jpg', mask_path.name)
+            gt_mask = Image.open(mask_path).convert('L')
+            gt_mask = gt_mask.point(lambda x: 255 if x > 0 else 0, '1')
+            gt_mask = np.asarray(gt_mask).astype(np.uint8)
 
-            for (x1, x2, y1, y2) in slices:
-                image = dataset.read([1,2,3], window = Window.from_slices((x1, x2), (y1, y2)))
-                image = np.moveaxis(image, 0, -1)
-                image = test_transform(image=image)['image']
-                image = image.float()
-                
-                with torch.no_grad():
-                    image = image.to(utils.get_device())[None]
+            with rasterio.open(img.as_posix(), transform=rasterio.Affine(1, 0, 0, 0, 1, 0)) as dataset:
+                slices = make_grid(dataset.shape, window=resize_size*2, min_overlap=32)
+                preds = np.zeros(dataset.shape, dtype=np.float32)
 
-                    logit = model(image)[0][0]
-                    score_sigmoid = logit.sigmoid().cpu().numpy()
-                    score_sigmoid = cv2.resize(score_sigmoid, (resize_size*2, resize_size*2), interpolation=cv2.INTER_LINEAR)
+                for (x1, x2, y1, y2) in slices:
+                    image = dataset.read([1,2,3], window = Window.from_slices((x1, x2), (y1, y2)))
+                    image = np.moveaxis(image, 0, -1)
+                    image = test_transform(image=image)['image']
+                    image = image.float()
+                    
+                    with torch.no_grad():
+                        image = image.to(utils.get_device())[None]
 
-                    preds[x1:x2, y1:y2] = score_sigmoid
-            tta_predictions.append(preds)
-            filenames.append(str(mask_path.name))
-            # out_path = Path(config['out_dir']) / config['dataset_name'] / 'tta' / \
-            #     config['lesion_type'] / 'prob_image' / Path(logdir).name
+                        logit = model(image)[0][0]
+                        score_sigmoid = logit.sigmoid().cpu().numpy()
+                        score_sigmoid = cv2.resize(score_sigmoid, (resize_size*2, resize_size*2), interpolation=cv2.INTER_LINEAR)
+
+                        preds[x1:x2, y1:y2] = score_sigmoid
             
-            # if not os.path.isdir(out_path):
-            #     os.makedirs(out_path, exist_ok=True)
+                yield preds, gt_mask, mask_path.name
 
-            # out_name = out_path / img.name
-
-            # predicted_save = Image.fromarray(
-            #     (preds*255).astype('uint8'))
-            # predicted_save.save(out_name, "JPEG", quality=100)
-            # print(f'Saved {img.name} to {str(out_path)}')
     logging.info('====> Estimate auc-pr score')
-    mean_auc = get_auc(None, tta_predictions, config)
+    mean_auc = get_auc(predict_generator(), config)
     logging.info(f'MEAN-AUC {mean_auc}')
     logging.info('====> Find optimal threshold from 0 to 1 w.r.t auc-pr curve')
-    optim_thres1, optim_thres2 = plot_aucpr_curve(None, tta_predictions, Path(logdir).name, config)
+    optim_thres1, optim_thres2, optim_thres3 = plot_aucpr_curve(predict_generator(), Path(logdir).name, config)
     
     # prob_dir = Path(config['out_dir']) / config['dataset_name'] / 'tta' / \
     #                 config['lesion_type'] / 'prob_image' / Path(logdir).name
-    for mask_name, mask_pred in tqdm(zip(filenames, tta_predictions)):
-        mask = (mask_pred > optim_thres1).astype(np.float32)
+    for mask_pred, _, mask_name in tqdm(predict_generator()):
+        mask = (mask_pred > optim_thres3).astype(np.float32)
 
         out_path = Path(config['out_dir']) / config['dataset_name'] / 'tta' / \
             config['lesion_type'] / Path(logdir).name
@@ -246,10 +219,14 @@ def tta_patches(logdir, config, args):
         if not os.path.isdir(out_path):
             os.makedirs(out_path, exist_ok=True)
 
+        mask_name = re.sub('_' + config['lesion_type'] + '.tif', '.jpg', mask_name)
         out_name = out_path / mask_name
         so(mask, out_name)  # PIL Image format
 
-    del filenames, tta_predictions
-    gc.collect()
     logging.info('====> Finishing inference')
 
+if __name__ == '__main__':
+    checkpoints = '../../models/IDRiD/SE/Apr26_09_24/checkpoints/best.pth'
+    checkpoints = torch.load(checkpoints)
+    model = archs.get_model()
+    pass

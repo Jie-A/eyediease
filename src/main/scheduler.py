@@ -8,7 +8,8 @@ from torch.optim.lr_scheduler import (
     MultiStepLR,
     CosineAnnealingLR,
     CosineAnnealingWarmRestarts,
-    ReduceLROnPlateau
+    ReduceLROnPlateau,
+    _LRScheduler
 )
 
 
@@ -32,6 +33,16 @@ class CosineAnnealingWarmRestartsWithDecay(CosineAnnealingWarmRestarts):
             for base_lr in self.base_lrs
         ]
 
+class PolyLR(_LRScheduler):
+    def __init__(self, optimizer, max_iters, power=0.9, last_epoch=-1, min_lr=1e-6):
+        self.power = power
+        self.max_iters = max_iters
+        self.min_lr = min_lr
+        super(PolyLR, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        return [max(base_lr * (1 - self.last_epoch / self.max_iters) ** self.power, self.min_lr)
+                for base_lr in self.base_lrs]
 
 def get_scheduler(scheduler_name: str, optimizer, lr, num_epochs, batches_in_epoch=None, mode=None):
     if scheduler_name is None or scheduler_name.lower() == "none":
@@ -39,6 +50,9 @@ def get_scheduler(scheduler_name: str, optimizer, lr, num_epochs, batches_in_epo
 
     if scheduler_name.lower() == "reduce":
         return ReduceLROnPlateau(optimizer, mode=mode, patience=5)
+    
+    if scheduler_name.lower() == "poly":
+        return PolyLR(optimizer, num_epochs)
 
     if scheduler_name.lower() == "cos":
         return CosineAnnealingLR(optimizer, num_epochs, eta_min=1e-6)

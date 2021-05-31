@@ -31,7 +31,7 @@ def get_model(params, model_name):
     return model
 
 if __name__ == '__main__':
-    exp_name = 'Apr23_13_50'
+    exp_name = 'Apr26_09_24'
     config = TestConfig.get_all_attributes()
     logdir = '../../models/' + config['dataset_name'] + '/' + config['lesion_type'] + '/' + exp_name
 
@@ -44,7 +44,7 @@ if __name__ == '__main__':
     else:
         model = archs.get_model(
             model_name=config['model_name'], 
-            params = config['model_params'], is_train=False)
+            params = config['model_params'], training=False)
     preprocessing_fn, mean, std = archs.get_preprocessing_fn(dataset_name=config['dataset_name'])
 
     test_img_dir = '../..' / config['test_img_path']
@@ -80,10 +80,10 @@ if __name__ == '__main__':
     mean_auc = 0
     mean_pre = 0
     mean_re = 0
-    dice_score = smp.utils.metrics.Fscore(threshold=0.6)
-    iou_score = smp.utils.metrics.IoU(threshold=0.6)
-    precision = smp.utils.metrics.Precision(threshold=0.6)
-    recall = smp.utils.metrics.Recall(threshold=0.6)
+    dice_score = smp.utils.metrics.Fscore(threshold=None)
+    iou_score = smp.utils.metrics.IoU(threshold=None)
+    precision = smp.utils.metrics.Precision(threshold=None)
+    recall = smp.utils.metrics.Recall(threshold=None)
 
     if config['data_type'] == 'tile':
         with torch.no_grad():
