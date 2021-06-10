@@ -1,6 +1,6 @@
 import torch.nn as nn
 import numpy as np
-from . import attentionunet, hrnet, doubleunet, dbunet, unet, rcnn_unet, sa_unet, hed, fpn, unets, deeplab, transunet, unetplusplusstar
+from . import attentionunet, hrnet, doubleunet, dbunet, unet, rcnn_unet, sa_unet, hed, fpn, unets, deeplab, transunet, unetplusplusstar, LeeJunHyun_impl, unet3plus, axial_attentionunet
 
 __all__ = ['list_models', 'get_model', 'get_preprocessing_fn']
 
@@ -33,8 +33,18 @@ MODEL_REGISTRY = {
     "seresnext50_fpncat128": fpn.seresnext50_fpncat128,
     "resnet34_fpncat128": fpn.resnet34_fpncat128,
     "resnet152_fpncat256": fpn.resnet152_fpncat256,
-    "transunet": transunet.VisionTransformer,
-    "unetplusplusstar": unetplusplusstar.UnetPlusPlusStar
+    "transunet_r50": transunet.TransUnet_R50,
+    "unetplusplusstar": unetplusplusstar.UnetPlusPlusStar,
+    "LeeJunHyun_impl_att": LeeJunHyun_impl.AttU_Net,
+    "LeeJunHyun_impl_R2U_Net": LeeJunHyun_impl.R2U_Net,
+    "LeeJunHyun_impl_R2AttU_Net": LeeJunHyun_impl.R2AttU_Net ,
+    "Unet3Plus_Base": unet3plus.UNet_3Plus,
+    "Unet3Plus_DS": unet3plus.UNet_3Plus_DeepSup,
+    "axialatt_unet": axial_attentionunet.axialunet,
+    "gated": axial_attentionunet.gated,
+    "medt": axial_attentionunet.MedT,
+    "logo": axial_attentionunet.logo,
+    "axialattwopo_unet": axial_attentionunet.axialunet_wopo,
 }
 
 def get_preprocessing_fn(dataset_name: str, grayscale: bool):
@@ -82,14 +92,12 @@ def list_models():
 
 def get_model(model_name: str, params=None, training=True) -> nn.Module:   
     try:
-        model_fn = MODEL_REGISTRY[model_name.lower()]
+        model_fn = MODEL_REGISTRY[model_name]
     except KeyError:
         raise KeyError(f"Cannot found {model_name}, available options are {list(MODEL_REGISTRY.keys())}")
     if params is None:
         return model_fn()
     if not training:
-        if model_name.lower() == 'transunet':
-            params['config'] = 'testing'
         if params.get('pretrained', None) is not None:
             params['pretrained'] = False
         if params.get('deep_supervision', None) is not None:

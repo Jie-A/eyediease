@@ -30,7 +30,7 @@ def start_experiment(args):
     n_devices = torch.cuda.device_count()
     logging.info(f'Start using {n_devices} GPUs')
     exp_name = datetime.now().strftime("%b%d_%H_%M")
-    # exp_name = 'May26_21_35'
+    # exp_name = 'Jun08_11_35'
     logging.info(f'Performing experiment {exp_name}')
     os.environ['CUDA_VISIBLE_DEVICES']=','.join([str(i) for i in range(n_devices)])
     SEED = 1999

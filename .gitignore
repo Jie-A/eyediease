@@ -6,7 +6,6 @@ __pycache__/
 *.so
 models/
 data/raw/
-outputs/
 # Distribution / packaging
 .Python
 env/
@@ -90,3 +89,5 @@ target/
 # Mypy cache
 .mypy_cache/
 
+backend/
+article-memory-log/

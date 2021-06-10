@@ -325,41 +325,25 @@ class BottleBlock(nn.Module):
         attn_dim_in = dim_out // proj_factor
         attn_dim_out = heads * dim_head
 
-        if use_axial:
-            atten_block = AxialAttention(
-                dim=fmap_size,
-                in_channels=attn_dim_in,
-                heads = heads
-            )
-        else:
-            atten_block = Attention(
+        self.net = nn.Sequential(
+            nn.Conv2d(dim, attn_dim_in, 1, bias = False),
+            nn.BatchNorm2d(attn_dim_in),
+            activation,
+            Attention(
                 dim = attn_dim_in,
                 fmap_size = fmap_size,
                 heads = heads,
                 dim_head = dim_head,
                 rel_pos_emb = rel_pos_emb
             ),
-
-        self.conv1 =  nn.Sequential(
-            nn.Conv2d(dim, attn_dim_in, 1, bias = False),
-            nn.BatchNorm2d(attn_dim_in),
-            activation
-        )
-
-        if downsample:
-            self.down = nn.Sequential(
-                nn.AvgPool2d((2, 2)) if downsample else nn.Identity(),
-                nn.BatchNorm2d(attn_dim_out),
-                activation
-            )
-
-        self.conv2 = nn.Sequential(
+            nn.AvgPool2d((2, 2)) if downsample else nn.Identity(),
+            nn.BatchNorm2d(attn_dim_out),
+            activation,
             nn.Conv2d(attn_dim_out, dim_out, 1, bias = False),
             nn.BatchNorm2d(dim_out)
         )
-
         # init last batch norm gamma to zero
-        nn.init.zeros_(self.conv2[-1].weight)
+        nn.init.zeros_(self.net[-1].weight)
 
         # final activation
         self.activation = activation

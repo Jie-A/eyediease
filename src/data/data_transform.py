@@ -5,6 +5,7 @@ from typing import Tuple
 
 __all__ = ['BaseTransform', 
         'EasyTransform', 
+        'EasyTransform_v2',
         'MediumTransform' ,
         'NormalTransform', 
         'AdvancedTransform', 
@@ -59,7 +60,7 @@ class NormalTransform(BaseTransform):
             A.VerticalFlip(p=0.5),
             A.HorizontalFlip(p=0.5),
             A.RandomRotate90(p=0.7),
-            A.IAAAdditiveGaussianNoise()
+            A.GaussNoise()
         ]
     
     def resize_transforms(self):
@@ -89,6 +90,24 @@ class EasyTransform(NormalTransform):
             A.CLAHE(p=0.5),
             A.RandomBrightnessContrast(p=0.5),
             A.RandomGamma(p=0.5)
+        ]
+
+class EasyTransform_v2(NormalTransform):
+    def __init__(self, *args, **kwargs):
+        super(EasyTransform_v2, self).__init__(*args, **kwargs)
+
+    def hard_transform(self):
+        return [
+            A.VerticalFlip(p=0.5),
+            A.HorizontalFlip(p=0.5),
+            A.RandomRotate90(p=0.5),
+            A.OneOf([
+                A.ElasticTransform(alpha=120, sigma=120 * 0.05,
+                                   alpha_affine=120 * 0.03, p=0.5),
+                A.GridDistortion(p=0.5),
+                A.OpticalDistortion(distort_limit=2, shift_limit=0.5, p=0.5)
+            ], p=0.5),
+            A.ShiftScaleRotate()
         ]
 
 class MediumTransform(NormalTransform):
@@ -131,7 +150,7 @@ class AdvancedTransform(NormalTransform):
                 A.OpticalDistortion(distort_limit=2, shift_limit=0.5),
                 ], p=0.0),
             A.ShiftScaleRotate(),
-            A.IAAAdditiveGaussianNoise()
+            A.GaussNoise()
         ])
 
 def crop_image_from_gray(img,tol=7):

@@ -2,7 +2,48 @@ import torch
 from einops import rearrange
 from torch import nn
 
-from self_attention_cv.pos_embeddings.relative_pos_enc_qkv import Relative2DPosEncQKV
+class Relative2DPosEncQKV(nn.Module):
+    def __init__(self, dim_head, dim_v=16, dim_kq=8):
+        """
+        Implementation of 2D relative positional embeddings for q,v,k
+        Out shape shape will be [dim_head, dim, dim]
+        Embeddings are shared across heads for all q,k,v
+        Based on Axial DeepLab https://arxiv.org/abs/2003.07853
+
+        Args:
+            dim_head: the dimension of the head
+            dim_v: d_out in the paper
+            dim_kq: d_k in the paper
+        """
+        super().__init__()
+        self.dim = dim_head
+        self.dim_head_v = dim_v
+        self.dim_head_kq = dim_kq
+        self.qkv_chan = 2 * self.dim_head_kq + self.dim_head_v
+
+        # 2D relative position embeddings of q,k,v:
+        self.relative = nn.Parameter(torch.randn(self.qkv_chan, dim_head * 2 - 1), requires_grad=True)
+
+        relative_index_2d = self.relative_index()
+        self.register_buffer('flatten_index', relative_index_2d)
+
+    def relative_index(self):
+        # integer lists from 0 to 63
+        query_index = torch.arange(self.dim).unsqueeze(0)  # [1, dim]
+        key_index = torch.arange(self.dim).unsqueeze(1)  # [dim, 1]
+
+        relative_index_2d = (key_index - query_index) + self.dim - 1  # dim X dim
+        return rearrange(relative_index_2d, 'i j->(i j)')  # flatten
+
+    def forward(self):
+        all_embeddings = torch.index_select(self.relative, 1, self.flatten_index)  # [head_planes , (dim*dim)]
+
+        all_embeddings = rearrange(all_embeddings, ' c (x y)  -> c x y', x=self.dim)
+
+        q_embedding, k_embedding, v_embedding = torch.split(all_embeddings,
+                                                            [self.dim_head_kq, self.dim_head_kq, self.dim_head_v],
+                                                            dim=0)
+        return q_embedding, k_embedding, v_embedding
 
 
 def _conv1d1x1(in_channels, out_channels):
@@ -22,13 +63,14 @@ class AxialAttention(nn.Module):
             dim_head_kq: inner dim
         """
         super().__init__()  
+
         self.dim_head = in_channels // heads
         self.dim = dim
 
         self.heads = heads
 
         self.dim_head_v = self.dim_head  # d_out
-        self.dim_head_kq = dim_head_kq
+        self.dim_head_kq = dim_head_kq #d_q
         self.qkv_channels = self.dim_head_v + self.dim_head_kq * 2
         self.to_qvk = _conv1d1x1(in_channels, self.heads * self.qkv_channels)
 
@@ -112,7 +154,7 @@ class AxialAttentionBlock(nn.Module):
         super().__init__()
         self.dim = dim
         self.heads = heads
-        d_in = 128  # hardcoded
+        d_in = 512  # hardcoded
 
         # brings the input channels to 128 feature maps
         self.in_conv1x1 = _conv2d1x1(in_channels, d_in)
@@ -142,7 +184,7 @@ class AxialAttentionBlock(nn.Module):
         return self.relu(self.out_conv1x1(x) + x_in)
 
 if __name__ == '__main__':
-    block = AxialAttentionBlock(64, 32)
+    block = AxialAttentionBlock(64, 32).cuda()
     block1 = AxialAttention(32, 64)
-    a = torch.rand(64, 64, 32)
-    print(block1(a).shape)
+    a = torch.rand(2, 64, 32, 32).cuda()
+    print(block(a).shape)

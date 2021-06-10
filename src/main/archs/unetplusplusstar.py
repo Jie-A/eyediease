@@ -1,18 +1,21 @@
 from pytorch_toolbelt.modules.backbone.senet import se_resnet50
 import torch
-from torch import nn, Tensor
+from torch import nn
 from torch.nn import functional as F
-from torchvision.models import resnet50
-from timm.models.efficientnet_blocks import InvertedResidual
 from segmentation_models_pytorch.base import modules as md
-from inplace_abn import InPlaceABN
 from typing import Optional, Union, List
 # import sys
 # sys.path.append('.')
 from .modules import DropBlock2D
-from .modules import BottleBlock, BottleStack
-from .model_util import get_lr_parameters, summary
-
+from .modules import BottleBlock
+from .axial_attention_v2 import AxialAttentionBlock
+from .model_util import get_lr_parameters
+try:
+    from inplace_abn import InPlaceABN
+except:
+    print("In order to use `use_batchnorm='inplace'` inplace_abn package must be installed. "
+                + "To install see: https://github.com/mapillary/inplace_abn")
+    
 class Conv2dReLU(nn.Sequential):
     def __init__(
             self,
@@ -37,7 +40,7 @@ class Conv2dReLU(nn.Sequential):
             kernel_size,
             stride=stride,
             padding=padding,
-            bias=not (use_batchnorm),
+            bias=not(use_batchnorm),
         )
 
         dropblock = DropBlock2D(block_size=7, drop_prob=drop_block_prob)
@@ -93,8 +96,8 @@ class DecoderBlock(nn.Module):
             x = torch.cat([x, skip], dim=1)
             x = self.attention1(x)
         x = self.conv1(x)
-        x = self.attention2(x)
         x = self.conv2(x)
+        x = self.attention2(x)
         return x
 
 class SegmentationHead(nn.Sequential):
@@ -163,22 +166,16 @@ class UnetPlusPlusDecoder(nn.Module):
         dense_x = {}
         for layer_idx in range(len(self.in_channels)-1):
             for depth_idx in range(self.depth-layer_idx):
-                # print('Layer idx', layer_idx)
                 if layer_idx == 0:
                     output = self.blocks[f'x_{depth_idx}_{depth_idx}'](features[depth_idx], features[depth_idx+1])
                     dense_x[f'x_{depth_idx}_{depth_idx}'] = output
-                    # print('Feature1', features[depth_idx].shape)
-                    # print('Feature2', features[depth_idx+1].shape)
-                    # print('Output', output.shape)
+
                 else:
                     dense_l_i = depth_idx + layer_idx
                     cat_features = [dense_x[f'x_{idx}_{dense_l_i}'] for idx in range(depth_idx+1, dense_l_i+1)]
                     cat_features = torch.cat(cat_features + [features[dense_l_i+1]], dim=1)
                     dense_x[f'x_{depth_idx}_{dense_l_i}'] =\
                         self.blocks[f'x_{depth_idx}_{dense_l_i}'](dense_x[f'x_{depth_idx}_{dense_l_i-1}'], cat_features)
-
-        # for key in dense_x.keys():
-        #     print(f'{key} shape', dense_x[key].shape)
 
         dense_x[f'x_{0}_{self.depth}'] = self.blocks[f'x_{0}_{self.depth}'](dense_x[f'x_{0}_{self.depth-1}'])
         if self.deep_supervision:
@@ -213,8 +210,11 @@ class BoTSER50(nn.Module):
         self.layer2 = seresnet.layer2
         self.layer3 = seresnet.layer3
         if use_axial:
-            block = None
-            pass
+            block = AxialAttentionBlock(
+                in_channels=2048, 
+                dim=32,
+                heads=8
+            )
         else:
             block = BottleBlock(
                 dim=2048,
@@ -228,20 +228,19 @@ class BoTSER50(nn.Module):
                 activation=nn.ReLU()
             )
 
-            pass
-
         self.layer4 = nn.Sequential(
             *list(seresnet.layer4.children())[:2],
             block
         )
 
-        #Freeze weights of the first layer
-        for param in self.layer0.parameters():
-            param.requires_grad = False
-
         out_channels = [3, 64, 256, 512, 1024, 2048]
         self.out_channels = out_channels
+
         if pretrained:
+            #Freeze weights of the first layer`
+            for param in self.layer0.parameters():
+                param.requires_grad = False
+
             for layer  in [self.layer0, self.layer1, self.layer2, self.layer3]:
                 set_bn_eval(layer)
     
@@ -278,9 +277,24 @@ def initialize(module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
+encoder_config = {
+    'BoTSER50_Axial_Imagenet': {
+        'pretrained': True,
+        'use_axial': True
+    },
+    'BoTSER50_Axial_scratch': {
+        'pretrained': False,
+        'use_axial': True
+    },
+    'BoTSER50_Imagenet': {
+        'pretrained': True,
+        'use_axial': False
+    }
+}
 
 def get_encoder(encoder_name:str):
-    return BoTSER50(pretrained=True)
+    kwargs = encoder_config[encoder_name]
+    return BoTSER50(**kwargs)
 
 class UnetPlusPlusStar(nn.Module):
     def __init__(
@@ -305,7 +319,7 @@ class UnetPlusPlusStar(nn.Module):
                 use_batchnorm=decoder_use_batchnorm,
                 attention_type=decoder_attention_type,
                 deep_supervision=deep_supervision,
-                drop_block_prob=drop_block_prob
+                drop_block_prob=drop_block_prob,
             )
 
             self.segmentation_head = SegmentationHead(
@@ -360,30 +374,33 @@ class UnetPlusPlusStar(nn.Module):
     
     def get_paramgroup(self, base_lr=None):
         lr_dict = {
-            # "encoder.layer0": 0.1,
             "encoder.layer1": 0.1,
             "encoder.layer2": 0.1,
             "encoder.layer3": 0.1,
-
         }
+        
         lr_group = get_lr_parameters(self, base_lr, lr_dict)
         return lr_group
 
 
 
 if __name__ == '__main__':
-    # import torch.cuda.amp as amp
-    model = UnetPlusPlusStar(encoder_name = 'BoTSER50', decoder_attention_type='scse', decoder_use_batchnorm='inplace', deep_supervision=False, drop_block_prob=0.1).cpu()
+    import torch.cuda.amp as amp
+    model = UnetPlusPlusStar(
+        encoder_name = 'BoTSER50', 
+        decoder_attention_type='scse', 
+        decoder_use_batchnorm='inplace', 
+        deep_supervision=True, 
+        drop_block_prob=0.1).cuda()
+        
     print('Number params', model.get_num_parameters())
-    # summary(model, (3, 1024, 1024), device=torch.device('cuda:0'))
-    # param_group = model.get_paramgroup(0.001)
-    # img = torch.randn(2, 3, 1024, 1024).cuda()
-    # with amp.autocast():
-    #     final_pred, preds = model(img) 
-    # for pred in preds:
-    #     print(pred.shape)
+    img = torch.randn(2, 3, 1024, 1024).cuda()
+    with amp.autocast():
+        final_pred, preds = model(img) 
+    for pred in preds:
+        print(pred.shape)
 
-    # print(final_pred.shape)
+    print(final_pred.shape)
 
     # optim = torch.optim.Adam(param_group, lr = 0.001, weight_decay=1e-5)
     # for param_group in optim.param_groups:

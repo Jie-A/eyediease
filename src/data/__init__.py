@@ -6,6 +6,8 @@ def get_transform(name):
         return NormalTransform
     if name == 'easy':
         return EasyTransform
+    if name == 'easy_v2':
+        return EasyTransform_v2
     if name == 'medium':
         return MediumTransform
     if name == 'advanced':

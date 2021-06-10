@@ -113,7 +113,7 @@ class Up_Atten(nn.Module):
     def __init__(self, in_ch, out_ch, drop_block_rate, bilinear = True):
         super(Up_Atten, self).__init__()
         self.atten = Attention_block(F_g=in_ch // 2, F_l=out_ch, F_int=in_ch)
-        self.up_conv = EfficientUnetBlock(in_ch // 2 + out_ch, out_ch, drop_block_rate=drop_block_rate)
+        self.up_conv = DoubleConv(in_ch // 2 + out_ch, out_ch, drop_block_rate=drop_block_rate)
         if bilinear:
             self.up = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
@@ -133,7 +133,7 @@ class Up_Atten(nn.Module):
 class Unet_Decoder(nn.Module):
     def __init__(self, encoder_channels, n_classes, dropout, drop_block_rate):
         super(Unet_Decoder, self).__init__()
-        self.aspp = ASPP(encoder_channels[-1], 32, encoder_channels[-1])
+        # self.aspp = ASPP(encoder_channels[-1], 32, encoder_channels[-1])
         self.decoder_output = nn.ModuleList()
         encoder_channels = encoder_channels[::-1]
         array_1 = encoder_channels[:-1]
@@ -157,7 +157,7 @@ class Unet_Decoder(nn.Module):
         # decoder_features = []  
         reverse_features = encoder_features[::-1]  
         up_decode = reverse_features[0]
-        up_decode = self.aspp(up_decode)
+        # up_decode = self.aspp(up_decode)
         for i, feature in enumerate(reverse_features[1: ]):
             out_decode = self.decoder_output[i](up_decode, feature)
             # decoder_features.append(out_decode)

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .model_util import get_lr_parameters, summary
 
 __all__ = ['DUNet']
 
@@ -136,6 +137,15 @@ class DUNet(nn.Module):
         output2 = self.out1(y)
         # print(output2.size())
         return output2
+
+    def get_num_parameters(self):
+        trainable= int(sum(p.numel() for p in self.parameters() if p.requires_grad))
+        total = int(sum(p.numel() for p in self.parameters()))
+        return trainable, total
+    
+    def get_paramgroup(self, base_lr=None):
+        lr_group = get_lr_parameters(self, base_lr, lr_group = dict())
+        return lr_group
 
 if __name__ == '__main__':
     model = DUNet()

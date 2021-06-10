@@ -11,7 +11,11 @@ import numpy as np
 from torch.nn import Dropout, Softmax, Linear, Conv2d, LayerNorm
 from torch.nn.modules.utils import _pair
 from scipy import ndimage
+
+# import sys
+# sys.path.append('.')
 from .modules import ResNetV2
+from .model_util import get_lr_parameters
 
 
 logger = logging.getLogger(__name__)
@@ -366,15 +370,15 @@ class VisionTransformer(nn.Module):
         super(VisionTransformer, self).__init__()
         self.num_classes = num_classes
         self.zero_head = zero_head
-        self.classifier = CONFIGS[config].classifier
-        self.transformer = Transformer(CONFIGS[config], img_size, vis)
-        self.decoderbranch = DecoderCup(CONFIGS[config])
+        self.classifier = config.classifier
+        self.transformer = Transformer(config, img_size, vis)
+        self.decoderbranch = DecoderCup(config)
         self.mask = SegmentationHead(
-            in_channels=CONFIGS[config]['decoder_channels'][-1],
-            out_channels=CONFIGS[config]['n_classes'],
+            in_channels=config['decoder_channels'][-1],
+            out_channels=config['n_classes'],
             kernel_size=3,
         )
-        self.config = CONFIGS[config]
+        self.config = config
 
     def forward(self, x):
         if x.size()[1] == 1:
@@ -384,9 +388,21 @@ class VisionTransformer(nn.Module):
         logits = self.mask(x)
         return logits
 
+    def get_num_parameters(self):
+        trainable= int(sum(p.numel() for p in self.parameters() if p.requires_grad))
+        total = int(sum(p.numel() for p in self.parameters()))
+        return trainable, total
+    
+    def get_paramgroup(self, base_lr=None):
+        lr_dict = {
+            'transformer': 0.1
+        }
+        lr_group = get_lr_parameters(self, base_lr, lr_group = lr_dict)
+        return lr_group
+
+
     def load_from(self, weights):
         with torch.no_grad():
-
             res_weight = weights
             self.transformer.embeddings.patch_embeddings.weight.copy_(np2th(weights["embedding/kernel"], conv=True))
             self.transformer.embeddings.patch_embeddings.bias.copy_(np2th(weights["embedding/bias"]))
@@ -434,11 +450,10 @@ class VisionTransformer(nn.Module):
                         unit.load_from(res_weight, n_block=bname, n_unit=uname)
 
 import ml_collections
-
 def get_b16_config():
     """Returns the ViT-B/16 configuration."""
     config = ml_collections.ConfigDict()
-    config.patches = ml_collections.ConfigDict({'size': (64, 64)})
+    config.patches = ml_collections.ConfigDict({'size': (16, 16)})
     config.hidden_size = 768
     config.transformer = ml_collections.ConfigDict()
     config.transformer.mlp_dim = 3072
@@ -455,7 +470,7 @@ def get_b16_config():
 
     config.decoder_channels = (256, 128, 64, 16)
     config.n_classes = 1
-    config.activation = 'sigmoid'
+    config.activation = None
     return config
 
 def get_testing():
@@ -488,7 +503,7 @@ def get_r50_b16_config():
     config.skip_channels = [512, 256, 64, 16]
     config.n_classes = 1
     config.n_skip = 3
-    config.activation = 'sigmoid'
+    config.activation = None
 
     return config
 
@@ -499,13 +514,23 @@ CONFIGS = {
     'testing': get_testing(),
 }
 
+
+def TransUnet_R50(pretrained=True, img_size=1024, num_classes=1):
+    config = CONFIGS['R50-ViT-B_16']
+    config.patches.grid = (int(img_size / config.patches.size[0]), int(img_size / config.patches.size[1]))
+    config.n_classes = num_classes
+    model = VisionTransformer(config, img_size=img_size, num_classes=num_classes)
+    if pretrained:
+        weights = np.load(config.pretrained_path)
+        model.load_from(weights=weights)
+
+    return model
+
+
 if __name__ == '__main__':
     from torch.cuda import amp
-
-    model = VisionTransformer('R50-ViT-B_16', img_size=512, num_classes=1).cuda()
-
-    a = torch.rand(2, 3, 512, 512).cuda()
-
+    model = TransUnet_R50(True, img_size=256).cuda()
+    a = torch.rand(2, 3, 256, 256).cuda()
     print(hasattr(model, 'encoder'))
     print(hasattr(model, 'decoder'))
     print(hasattr(model, 'segmentation_head'))

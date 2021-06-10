@@ -3,14 +3,22 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
 
+[[source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/torch_stable.html"
+verify_ssl = false
+
+
 [packages]
+torch = {version = "==1.8.1", index = "pytorch"}
+torchvision = {version = "==0.9.1", index = "pytorch"}
 matplotlib = "==3.2.2"
 tqdm = "==4.41.1"
 scikit-image = "==0.16.2"
 numpy = "==1.19.5"
 opencv-python = "==4.1.2.30"
 prettytable = "==2.1.0"
-albumentations = "==0.4.6"
+albumentations = "*"
 catalyst = "==20.12"
 iglovikov-helper-functions = "==0.0.53"
 pytorch-toolbelt = "==0.4.2"
@@ -33,7 +41,6 @@ timm = "*"
 fastapi = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 python-multipart = "*"
-inplace-abn = "*"
 ml-collections = "*"
 einops = "*"
 
