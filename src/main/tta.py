@@ -3,15 +3,16 @@
 """
 
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
 import ttach as tta
-from pytorch_toolbelt.inference.tiles import ImageSlicer, TileMerger
-from pytorch_toolbelt.utils.torch_utils import to_numpy, image_to_tensor, tensor_from_rgb_image
 
 from catalyst.dl import utils
 import albumentations as A
 from albumentations.pytorch.transforms import ToTensorV2
+import albumentations.augmentations.crops.functional as F
+import albumentations.augmentations.geometric.functional as GF
 
 import os
 import cv2
@@ -78,11 +79,17 @@ def test_tta(logdir, config, args):
     test_transform = A.Compose(augmentation)
 
     test_ds = TestSegmentation(img_paths, config['gray'], mask_paths, transform=test_transform)
+    ORI_H, ORI_W = test_ds.ori_h, test_ds.ori_w
+    CROP_H, CROP_W = test_ds.crop_h, test_ds.crop_w
     test_loader = DataLoader(test_ds, batch_size=config['val_batch_size'], num_workers=2, pin_memory=True, shuffle=True)
 
     checkpoints = torch.load(f"{logdir}/checkpoints/{'best' if str_2_bool(args['best']) else 'last'}.pth")
     model.load_state_dict(checkpoints['model_state_dict'])
     model.eval()
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        model = nn.DataParallel(model)
     model = model.to(utils.get_device())
 
     # D4 makes horizontal and vertical flips + rotations for [0, 90, 180, 270] angels.
@@ -106,7 +113,11 @@ def test_tta(logdir, config, args):
                 pred = torch.sigmoid(pred)
                 pred = pred.float().numpy()
                 for i in range(len(batch['image'])):
-                    yield pred[i][0], batch['mask'][i].numpy(), batch['filename'][i]
+                    crop_image = F.center_crop(pred[i][0], CROP_H, CROP_W)
+                    crop_mask = F.center_crop(batch['mask'][i].numpy(), CROP_H, CROP_W)
+                    image = GF.resize(crop_image, height=ORI_H, width=ORI_W, interpolation=cv2.INTER_LINEAR)
+                    mask = GF.resize(crop_mask, height=ORI_H, width=ORI_W, interpolation=cv2.INTER_LINEAR)
+                    yield image, mask, batch['filename'][i]
 
     logging.info('====> Estimate auc-pr score')
     mean_auc = get_auc(predict_generator(), config)

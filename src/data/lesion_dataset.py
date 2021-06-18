@@ -7,11 +7,8 @@ import numpy as np
 from iglovikov_helper_functions.utils.image_utils import pad
 from collections import OrderedDict
 from PIL import Image
-from tqdm.auto import tqdm
-import gc
-import rasterio
-from rasterio.windows import Window
-from ..main.util import make_grid
+import cv2
+import albumentations.augmentations.geometric.functional as F
 
 __all__ = ['CLASS_NAMES', 'CLASS_COLORS', 'OneLesionSegmentation', 'TestSegmentation']
 
@@ -47,13 +44,6 @@ class OneLesionSegmentation(Dataset):
         self.preprocessing_fn = preprocessing_fn
         self.mode = data_type
         self.len = len(images)
-        # if data_type == 'tile':
-        #     self.window = 512
-        #     self.overlap = 32
-        #     self.identity = rasterio.Affine(1, 0, 0, 0, 1, 0)
-        #     self.x, self.y, self.tile_id = [], [], []
-        #     self._build_slide()
-        #     self.len = len(self.x)
 
     def __len__(self):
         return self.len
@@ -109,6 +99,12 @@ class TestSegmentation(Dataset):
         self.transform = transform
         self.factor = factor
         self.is_gray = is_gray
+        image = Image.open(images[0]).convert('RGB')
+        self.ori_w, self.ori_h = image.size
+        image = np.asarray(image).astype('uint8')
+        tmp_img = F.longest_max_size(image, 1024, cv2.INTER_LINEAR)
+        self.crop_h, self.crop_w = tmp_img.shape[0], tmp_img.shape[1]
+        del tmp_img
 
     def __len__(self):
         return len(self.images)
@@ -119,7 +115,7 @@ class TestSegmentation(Dataset):
         result = OrderedDict()
         image = Image.open(image_path).convert('RGB')
         image = np.asarray(image).astype('uint8')
-        
+
         if self.is_gray:
             image = np.dot(image[..., :3], [0.2989, 0.5870, 0.1140]).astype('uint8')
             image = np.expand_dims(image, -1)

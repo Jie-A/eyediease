@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+from .model_util import get_lr_parameters
 
 
 class ResidualConv(nn.Module):
@@ -141,7 +142,7 @@ class AttentionBlock(nn.Module):
 
 
 class ResUnetPlusPlus(nn.Module):
-    def __init__(self, channel, filters=[32, 64, 128, 256, 512]):
+    def __init__(self, channel=3, filters=[32, 64, 128, 256, 512]):
         super(ResUnetPlusPlus, self).__init__()
 
         self.input_layer = nn.Sequential(
@@ -182,7 +183,7 @@ class ResUnetPlusPlus(nn.Module):
 
         self.aspp_out = ASPP(filters[1], filters[0])
 
-        self.output_layer = nn.Sequential(nn.Conv2d(filters[0], 1, 1), nn.Sigmoid())
+        self.output_layer = nn.Sequential(nn.Conv2d(filters[0], 1, 1))
 
     def forward(self, x):
         x1 = self.input_layer(x) + self.input_skip(x)
@@ -217,3 +218,12 @@ class ResUnetPlusPlus(nn.Module):
         out = self.output_layer(x9)
 
         return out
+
+    def get_num_parameters(self):
+        trainable= int(sum(p.numel() for p in self.parameters() if p.requires_grad))
+        total = int(sum(p.numel() for p in self.parameters()))
+        return trainable, total
+    
+    def get_paramgroup(self, base_lr=None):
+        lr_group = get_lr_parameters(self, base_lr, lr_group = dict())
+        return lr_group

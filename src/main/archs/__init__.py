@@ -1,6 +1,6 @@
 import torch.nn as nn
 import numpy as np
-from . import attentionunet, hrnet, doubleunet, dbunet, unet, rcnn_unet, sa_unet, hed, fpn, unets, deeplab, transunet, unetplusplusstar, LeeJunHyun_impl, unet3plus, axial_attentionunet
+from . import attentionunet, hrnet, doubleunet, dbunet, unet, rcnn_unet, sa_unet, hed, fpn, unets, deeplab, transunet, unetplusplusstar, LeeJunHyun_impl, unet3plus, axial_attentionunet, dcunet, resunetplusplus, deep_supunetplusplus, hubmap_kaggle, deep_supdeeplabv3plus
 
 __all__ = ['list_models', 'get_model', 'get_preprocessing_fn']
 
@@ -45,6 +45,11 @@ MODEL_REGISTRY = {
     "medt": axial_attentionunet.MedT,
     "logo": axial_attentionunet.logo,
     "axialattwopo_unet": axial_attentionunet.axialunet_wopo,
+    "dcunet": dcunet.DcUnet,
+    "resunetplusplus": resunetplusplus.ResUnetPlusPlus,
+    "unetplusplus_deepsup": deep_supunetplusplus.UnetPlusPlus,
+    "hubmap_kaggle": hubmap_kaggle.UNET_SERESNEXT101,
+    "deeplabv3plus_deepsup": deep_supdeeplabv3plus.DeepLabV3Plus
 }
 
 def get_preprocessing_fn(dataset_name: str, grayscale: bool):
@@ -98,8 +103,12 @@ def get_model(model_name: str, params=None, training=True) -> nn.Module:
     if params is None:
         return model_fn()
     if not training:
+        if params.get('clfhead', None) is not None:
+            params['clfhead'] = False
         if params.get('pretrained', None) is not None:
             params['pretrained'] = False
+        if params.get('encoder_weights', None) is not None:
+            params['encoder_weights'] = None
         if params.get('deep_supervision', None) is not None:
             params['deep_supervision'] = False
     return model_fn(**params)

@@ -1,4 +1,5 @@
 import albumentations as A
+from albumentations.augmentations.geometric.resize import RandomScale
 import cv2
 import numpy as np
 from typing import Tuple
@@ -129,6 +130,30 @@ class MediumTransform(NormalTransform):
             A.RandomBrightnessContrast(p=0.5),
             A.RandomGamma(p=0.5)
         ]
+
+class AdvancedTransform_Vessel(NormalTransform):
+    def __init__(self, *args, **kwargs):
+        super(AdvancedTransform, self).__init__(*args, **kwargs)
+    
+    def hard_transform(self):
+        return A.Compose([
+            A.RandomScale(scale_limit=[0.5, 2]),
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            A.RandomRotate90(p=0.7),
+            A.OneOf([
+                A.RandomContrast(),
+                A.RandomGamma(),
+                A.RandomBrightness(),
+            ]),
+            A.OneOf([
+                A.ElasticTransform(alpha=120, sigma=120 * 0.05, alpha_affine=120 * 0.03),
+                A.GridDistortion(),
+                A.OpticalDistortion(distort_limit=2, shift_limit=0.5),
+                ], p=0.0),
+            A.ShiftScaleRotate(),
+            A.GaussNoise()
+        ])
 
 class AdvancedTransform(NormalTransform):
     def __init__(self, *args, **kwargs):

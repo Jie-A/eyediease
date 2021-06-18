@@ -74,14 +74,14 @@ def get_loader(
             train_imgs = np_images[train_indices].tolist()
             valid_imgs = np_images[valid_indices].tolist()
         else:
-            train_df = pd.read_csv('data/processed/DRIVE/train/img_mask.csv')
+            train_df = pd.read_csv('data/processed/IDRiD/train/EX/img_mask.csv')
             train_df = train_df.sample(frac=1).reset_index(drop=True)
             train_imgs= train_df.loc[:, 'img'].values.tolist()
             train_imgs = [Path('/'.join(list(Path(path).parts[2:])) + '/') for path in train_imgs]
             train_masks = train_df.loc[:, 'mask'].values.tolist()
             train_masks = [Path('/'.join(list(Path(path).parts[2:])) + '/') for path in train_masks]
             
-            val_df = pd.read_csv('data/processed/DRIVE/val/img_mask.csv')
+            val_df = pd.read_csv('data/processed/IDRiD/val/EX/img_mask.csv')
             val_df = val_df.sample(frac=1).reset_index(drop=True)
             valid_imgs= val_df.loc[:, 'img'].values.tolist()
             valid_imgs = [Path('/'.join(list(Path(path).parts[2:])) + '/') for path in valid_imgs]

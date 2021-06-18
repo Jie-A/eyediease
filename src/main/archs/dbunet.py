@@ -51,7 +51,7 @@ def output_block():
     return Layer
 
 class DUNet(nn.Module):
-    def __init__(self):
+    def __init__(self, deep_supersion=False):
         super().__init__()
         self.conv1 = VGGBlock(3,64,64)        
         self.conv2 = VGGBlock(64,128,128)

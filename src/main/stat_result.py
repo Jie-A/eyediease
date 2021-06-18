@@ -33,10 +33,10 @@ def export_result(save_dir, test_config):
 		im_gt = im_gt.point(lambda x: 255 if x > 50 else 0, '1')
 		arr_gt = np.asarray(im_gt).astype(np.uint8)
 
-		if test_config['data_type'] == 'all':
-			transform = NormalTransform(test_config['scale_size'])
-			resize = transform.validation_transform()
-			arr_gt = resize(image = arr_gt)['image']
+		# if test_config['data_type'] == 'all':
+		# 	transform = NormalTransform(test_config['scale_size'])
+		# 	resize = transform.validation_transform()
+		# 	arr_gt = resize(image = arr_gt)['image']
 
 		if test_config['dataset_name'] == 'IDRiD':
 			pred_image_path = re.sub('_' + test_config['lesion_type'] + '.tif', '.jpg', image_path)

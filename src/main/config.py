@@ -4,37 +4,38 @@ from pathlib import Path
 __all__ = ['BaseConfig', 'TestConfig']
 
 class BaseConfig:
-    __basedir__ = 'data/processed/'
-    dataset_name = 'DRIVE'
+    __basedir__ = 'data/raw/'
+    dataset_name = 'IDRiD'
     # train_img_path = (Path(__basedir__) / dataset_name /'DDR-dataset/lesion_segmentation' / 'train/img', \
     #                 Path(__basedir__) / dataset_name /'DDR-dataset/lesion_segmentation' / 'valid/img')
     # train_mask_path = (Path(__basedir__) / dataset_name / 'DDR-dataset/lesion_segmentation' / 'train/labelcol', \
     #                 Path(__basedir__) / dataset_name / 'DDR-dataset/plesion_segmentation' / 'valid/labelcol')
 
-
+    # train_img_path = Path(__basedir__) / dataset_name /  'Seg-set/Original_Images'
+    # train_mask_path = Path(__basedir__) / dataset_name / 'Seg-set/HardExudate_Masks'
     train_img_path = Path(__basedir__) / dataset_name /  '1. Original Images' / 'a. Training Set'
     train_mask_path = Path(__basedir__) / dataset_name / '2. All Segmentation Groundtruths' / 'a. Training Set'
 
     # train_img_path = Path(__basedir__) / dataset_name / 'train/image'
     # train_mask_path = Path(__basedir__) / dataset_name / 'train/mask'
 
-    lesion_type = 'Vessel_DRIVE'
+    lesion_type = 'EX'
     data_mode = 'binary' 
     gray = False
     augmentation = 'advanced' #options: normal, easy, medium, advanced
     use_ben_transform = False #Good for vessel segmentation
-    scale_size = 128
-    data_type = 'tile'  #2 type of input format : whole image or tiles
+    scale_size = 1024
+    data_type = 'all'  #2 type of input format : whole image or tiles
 
     #Final
     finetune = False  # Traning only decoder
     num_epochs = 100
-    batch_size = 8
-    val_batch_size = 8
+    batch_size = 2
+    val_batch_size = 2
     learning_rate = 1e-3
     learning_rate_decode = 1e-4
     weight_decay = 1e-5
-    is_fp16 = False
+    is_fp16 = True
 
     #first
     # model_name = "transunet_r50"
@@ -60,12 +61,28 @@ class BaseConfig:
     #     "deep_supervision": True,
     #     "drop_block_prob": 0.1
     # }
+    model_name = "unetplusplus_deepsup"
+    model_params = {
+        "encoder_name": "se_resnet50",
+        "encoder_weights": "imagenet",
+        "decoder_attention_type": "scse",
+        "classes": 1,
+        "deep_supervision": False
+    }
 
-    model_name = "Unet3Plus_DS"
-    model_params = {"deep_supervision":True}
+    # model_name = "hubmap_kaggle"
+    # model_params = {
+    #     'deep_supervision': True,
+    #     'clfhead': True,
+    #     'clf_threshold': None,
+    #     'pretrained': True
+    # }
+    # model_name = "Unet3Plus_DS"
+    # model_params = {"deep_supervision":True}
     # model_name = 'sa_unet'
     # model_params = {'drop_prob': 0.18}
-
+    # model_name = "resunetplusplus"
+    # model_params = None
 #     model_name = "TransUnet"
 #     model_params = {
 #         "in_channels": 3, 
@@ -73,7 +90,7 @@ class BaseConfig:
 #         "classes": 1, 
 #         "vit_blocks": 8, 
 #         "vit_dim_linear_mhsa_block": 1024
-#    }
+#    }3
     # model_name = 'swin_tiny_attunet'
     # model_params = {
     #     'num_classes':1, 
@@ -94,7 +111,8 @@ class BaseConfig:
     # https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou
     # Should we use IOU loss instead of Dice loss in this case ?
     criterion = {"bce": 0.8, 'log_dice':0.2}
-    deep_supervision = True
+    # criterion_clf = 'bce'
+    deep_supervision = False
     if deep_supervision:
         criterion_ds = "bce"
 
@@ -102,7 +120,7 @@ class BaseConfig:
     optimizer = "adamw"
     scheduler = "cosr"
 
-    resume_path = None #Resume training
+    resume_path = "models/IDRiD/EX/Jun18_10_20/checkpoints/best_full.pth" #Resume training
 
     @classmethod
     def get_all_attributes(cls):
@@ -120,10 +138,12 @@ class BaseConfig:
 class TestConfig(BaseConfig):
     # test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 'DDR-dataset/lesion_segmentation' /'test/img'
     # test_mask_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 'DDR-dataset/lesion_segmentation' / 'test/labelcol'
-    # test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '1. Original Images' / 'b. Testing Set'
-    # test_mask_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '2. All Segmentation Groundtruths' / 'b. Testing Set'
-    test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 'test/image'
-    test_mask_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 'test/mask'
+    test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '1. Original Images' / 'b. Testing Set'
+    test_mask_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / '2. All Segmentation Groundtruths' / 'b. Testing Set'
+    # test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 'test/image'
+    # test_mask_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 'test/mask'
+    # test_img_path = Path(BaseConfig.__basedir__) / BaseConfig.dataset_name / 
+
     out_dir = 'outputs'
 
 
