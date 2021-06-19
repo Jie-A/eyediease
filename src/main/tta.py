@@ -86,11 +86,6 @@ def test_tta(logdir, config, args):
     checkpoints = torch.load(f"{logdir}/checkpoints/{'best' if str_2_bool(args['best']) else 'last'}.pth")
     model.load_state_dict(checkpoints['model_state_dict'])
     model.eval()
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-        model = nn.DataParallel(model)
-    model = model.to(utils.get_device())
 
     # D4 makes horizontal and vertical flips + rotations for [0, 90, 180, 270] angels.
     # and then merges the result masks with merge_mode="mean"
@@ -103,6 +98,12 @@ def test_tta(logdir, config, args):
         model = tta.SegmentationTTAWrapper(
             model, tta_transform(), merge_mode="mean")
     
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        model = nn.DataParallel(model)
+    model = model.to(utils.get_device())
+
     # this get predictions for the whole loader
     @multigen
     def predict_generator():

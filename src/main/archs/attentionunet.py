@@ -11,8 +11,11 @@ from pytorch_toolbelt.modules.encoders.timm.efficient_net import make_n_channel_
 
 import timm
 from timm.models.efficientnet_blocks import DepthwiseSeparableConv, InvertedResidual
+# import sys
+# sys.path.append('..')
 from .modules import *
 from .model_util import init_weights
+from .model_util import get_lr_parameters
 
 __all__ = [
     'Attention_Unet', 
@@ -110,10 +113,10 @@ class EfficientUnetBlock(nn.Module):
 
 
 class Up_Atten(nn.Module):
-    def __init__(self, in_ch, out_ch, drop_block_rate, bilinear = True):
+    def __init__(self, in_ch, out_ch, bilinear = True):
         super(Up_Atten, self).__init__()
         self.atten = Attention_block(F_g=in_ch // 2, F_l=out_ch, F_int=in_ch)
-        self.up_conv = DoubleConv(in_ch // 2 + out_ch, out_ch, drop_block_rate=drop_block_rate)
+        self.up_conv = DoubleConv(in_ch // 2 + out_ch, out_ch)
         if bilinear:
             self.up = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
@@ -131,16 +134,15 @@ class Up_Atten(nn.Module):
         return self.up_conv(d)
     
 class Unet_Decoder(nn.Module):
-    def __init__(self, encoder_channels, n_classes, dropout, drop_block_rate):
+    def __init__(self, encoder_channels, n_classes, dropout):
         super(Unet_Decoder, self).__init__()
-        # self.aspp = ASPP(encoder_channels[-1], 32, encoder_channels[-1])
         self.decoder_output = nn.ModuleList()
         encoder_channels = encoder_channels[::-1]
         array_1 = encoder_channels[:-1]
         array_2 = encoder_channels[1:]
 
         for i, (in_ch, out_ch) in enumerate(zip(array_1, array_2)):
-            next_up = Up_Atten(in_ch, out_ch, drop_block_rate) 
+            next_up = Up_Atten(in_ch, out_ch) 
             self.decoder_output.append(next_up)
         self.dropout = nn.Dropout2d(dropout)
         self.out_conv = nn.Sequential(
@@ -148,39 +150,37 @@ class Unet_Decoder(nn.Module):
             OutConv(encoder_channels[-1], n_classes)
         )
 
-        # channels = [n_classes]
-        # channels += [feature.out_ch for feature in list(reversed(self.decoder_output))]
-        # self.channels = channels
+        channels = [n_classes]
+        channels += [feature.out_ch for feature in list(reversed(self.decoder_output))]
+        self.channels = channels
         init_weights(self)
     
     def forward(self, encoder_features):    
-        # decoder_features = []  
+        decoder_features = []  
         reverse_features = encoder_features[::-1]  
         up_decode = reverse_features[0]
-        # up_decode = self.aspp(up_decode)
         for i, feature in enumerate(reverse_features[1: ]):
             out_decode = self.decoder_output[i](up_decode, feature)
-            # decoder_features.append(out_decode)
+            decoder_features.append(out_decode)
             up_decode = out_decode
         final = self.dropout(up_decode)
         final = self.out_conv(final)
-        # decoder_features.append(final)
-        # return list(reversed(decoder_features))
-        return final
+        decoder_features.append(final)
+        return list(reversed(decoder_features))
 
 class Attention_Unet(nn.Module):
     """
         Attention Unet with pretrained model.
         Resnet18, resnet34, resnet50, resnet101, wide_resnet, ... from timm package
     """
-    def __init__(self, n_classes, dropout, drop_block_rate, deep_supervision:bool, encoder: nn.Module):
+    def __init__(self, n_classes, dropout, deep_supervision:bool, encoder: nn.Module):
         super(Attention_Unet, self).__init__()
         
         self.encoder = encoder
         encoder_channels = self.encoder.filters
-        self.decoder = Unet_Decoder(encoder_channels, n_classes, dropout, drop_block_rate)
+        self.decoder = Unet_Decoder(encoder_channels, n_classes, dropout)
         self.deep_supervision = deep_supervision
-        # self.supervision = nn.ModuleList([OutConv(channels, n_classes) for channels in self.decoder.channels])
+        self.supervision = nn.ModuleList([OutConv(channels, n_classes) for channels in self.decoder.channels])
 
     def forward(self, x):
         x, pad = pad_image_tensor(x, 32)
@@ -189,33 +189,50 @@ class Attention_Unet(nn.Module):
         #Encode
         encoder_outputs = self.encoder(x)
         #Decode
-        final = self.decoder(encoder_outputs)
+        decoder_outputs = self.decoder(encoder_outputs)
         # if the input is not divisible by the output stride
-        # final = decoder_outputs[0]
+        final = decoder_outputs[0]
+
         if final.size(2) != H or final.size(3) != W:
             final = F.interpolate(final, size=(H, W), mode="bilinear", align_corners=True)
         
         final = unpad_image_tensor(final, pad)
-        # prediction_list = []
-        # if self.deep_supervision:
-        #     for feature_map, supervision  in zip(decoder_outputs, self.supervision):
-        #         prediction = supervision(feature_map)
-        #         prediction_list.append(prediction)
+        prediction_list = []
+        if self.deep_supervision:
+            for feature_map, supervision  in zip(decoder_outputs, self.supervision):
+                prediction = supervision(feature_map)
+                prediction_list.append(prediction)
+            return final, prediction_list[1: ]
+        else:
+            return final
+
+    def get_num_parameters(self):
+        trainable= int(sum(p.numel() for p in self.parameters() if p.requires_grad))
+        total = int(sum(p.numel() for p in self.parameters()))
+        return trainable, total
     
-        #     return final, prediction_list
-        # else:
-        return final
+    def get_paramgroup(self, base_lr=None):
+        lr_dict = {
+            "encoder": 0.1
+        }
+        
+        lr_group = get_lr_parameters(self, base_lr, lr_dict)
+        return lr_group
 
 
-def resnet50_attunet(num_classes=1, drop_rate=0.25, pretrained=True, freeze_bn=True, freeze_backbone=False):
+def seresnet50_attunet(num_classes=1, drop_rate=0.25, pretrained=True, freeze_bn=True, freeze_backbone=False, deep_supervision=False):
+    encoder = Unet_Encoder(freeze_bn=freeze_bn, backbone='seresnet50', freeze_backbone=freeze_backbone, pretrained=pretrained)
+    return Attention_Unet(n_classes=num_classes,dropout=drop_rate, encoder=encoder, deep_supervision=deep_supervision)
+
+def resnet50_attunet(num_classes=1, drop_rate=0.25, pretrained=True, freeze_bn=True, freeze_backbone=False, deep_supervision=False):
     encoder = Unet_Encoder(freeze_bn=freeze_bn, backbone='resnet50', freeze_backbone=freeze_backbone, pretrained=pretrained)
-    return Attention_Unet(n_classes=num_classes,dropout=drop_rate, encoder=encoder)
+    return Attention_Unet(n_classes=num_classes,dropout=drop_rate, encoder=encoder, deep_supervision=deep_supervision)
 
-def efficientnetb2_attunet(input_channels = 3, num_classes=1, drop_rate=0.25, pretrained=True, freeze_bn=True, freeze_backbone=False):
+def efficientnetb2_attunet(input_channels = 3, num_classes=1, drop_rate=0.25, pretrained=True, freeze_bn=True, freeze_backbone=False,  deep_supervision=False):
     encoder = Unet_Encoder(freeze_bn=freeze_bn, backbone='tf_efficientnet_b2', freeze_backbone=freeze_backbone, pretrained=pretrained)
     if input_channels != 3:
         encoder.change_input_channels(input_channels)
-    return Attention_Unet(n_classes=num_classes,dropout=drop_rate, encoder=encoder)
+    return Attention_Unet(n_classes=num_classes,dropout=drop_rate, encoder=encoder, deep_supervision=deep_supervision)
 
 def mobilenetv3_attunet(num_classes=1, drop_rate=0.25, pretrained=True, freeze_bn=True, freeze_backbone=False):
     encoder = Unet_Encoder(freeze_bn=freeze_bn, backbone='mobilenetv3_large_100', freeze_backbone=freeze_backbone, pretrained=pretrained)
@@ -230,13 +247,14 @@ def swin_small_attunet(num_classes=1, drop_rate=0.25, drop_block_rate=0.1, pretr
     return Attention_Unet(n_classes=num_classes,dropout=drop_rate, drop_block_rate=drop_block_rate, deep_supervision=deep_supervision, encoder=encoder)
 
 if __name__ == '__main__':
-    model = swin_tiny_attunet(1, deep_supervision=True)
-    a = torch.randn(1, 3, 256, 256)
+    model = resnet50_attunet(1, deep_supervision=True).cuda()
+    a = torch.randn(1, 3, 1024, 1024).cuda()
     output, deep_output = model(a)
     # for o in output:
     #     print(o.shape
     # 
     # )
+    print(output.shape)
     for fea in deep_output:
         print(fea.shape)
     # decoder = model.decoder

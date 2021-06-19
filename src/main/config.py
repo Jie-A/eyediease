@@ -19,7 +19,7 @@ class BaseConfig:
     # train_img_path = Path(__basedir__) / dataset_name / 'train/image'
     # train_mask_path = Path(__basedir__) / dataset_name / 'train/mask'
 
-    lesion_type = 'EX'
+    lesion_type = 'MA'
     data_mode = 'binary' 
     gray = False
     augmentation = 'advanced' #options: normal, easy, medium, advanced
@@ -30,18 +30,18 @@ class BaseConfig:
     #Final
     finetune = False  # Traning only decoder
     num_epochs = 100
-    batch_size = 2
-    val_batch_size = 2
+    batch_size = 4
+    val_batch_size = 4
     learning_rate = 1e-3
-    learning_rate_decode = 1e-4
+    learning_rate_decode = 1e-3
     weight_decay = 1e-5
-    is_fp16 = True
+    is_fp16 = False
 
     #first
     # model_name = "transunet_r50"
     # model_params = {
     #     'pretrained': True,
-    #     'img_size': 256,
+    #     'img_size': 512,
     #     'num_classes':1
     # }
 
@@ -61,15 +61,19 @@ class BaseConfig:
     #     "deep_supervision": True,
     #     "drop_block_prob": 0.1
     # }
-    model_name = "unetplusplus_deepsup"
-    model_params = {
-        "encoder_name": "se_resnet50",
-        "encoder_weights": "imagenet",
-        "decoder_attention_type": "scse",
-        "classes": 1,
-        "deep_supervision": False
+    # model_name = "deeplabv3plus_deepsup"
+    # model_params = {
+    #     "encoder_name": "se_resnet50",
+    #     "encoder_weights": "imagenet",
+    #     "classes": 1,
+    # }
+    model_name = "resnet50_attunet"
+    model_params ={
+        "num_classes":1,
+        "pretrained": True,
+        "drop_rate": 0.1,
+        "deep_supervision": True
     }
-
     # model_name = "hubmap_kaggle"
     # model_params = {
     #     'deep_supervision': True,
@@ -79,10 +83,13 @@ class BaseConfig:
     # }
     # model_name = "Unet3Plus_DS"
     # model_params = {"deep_supervision":True}
+
     # model_name = 'sa_unet'
     # model_params = {'drop_prob': 0.18}
+
     # model_name = "resunetplusplus"
     # model_params = None
+
 #     model_name = "TransUnet"
 #     model_params = {
 #         "in_channels": 3, 
@@ -112,7 +119,7 @@ class BaseConfig:
     # Should we use IOU loss instead of Dice loss in this case ?
     criterion = {"bce": 0.8, 'log_dice':0.2}
     # criterion_clf = 'bce'
-    deep_supervision = False
+    deep_supervision = True
     if deep_supervision:
         criterion_ds = "bce"
 
@@ -120,7 +127,7 @@ class BaseConfig:
     optimizer = "adamw"
     scheduler = "cosr"
 
-    resume_path = "models/IDRiD/EX/Jun18_10_20/checkpoints/best_full.pth" #Resume training
+    resume_path = None #Resume training
 
     @classmethod
     def get_all_attributes(cls):

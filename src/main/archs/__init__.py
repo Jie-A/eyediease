@@ -8,6 +8,7 @@ MODEL_REGISTRY = {
     "resnet50_attunet": attentionunet.resnet50_attunet, 
     "efficientnetb2_attunet": attentionunet.efficientnetb2_attunet,
     "mobilenetv3_attunet": attentionunet.mobilenetv3_attunet,
+    "seresnet50_attunet": attentionunet.seresnet50_attunet,
     "swin_tiny_attunet": attentionunet.swin_tiny_attunet,
     "swin_small_attunet": attentionunet.swin_small_attunet,
     "hrnet18": hrnet.hrnet18, 

@@ -135,7 +135,7 @@ def get_loader(
         num_workers=num_workers,
         shuffle=True,
         pin_memory=True,
-        drop_last=True
+        drop_last=False
     )
 
     valid_loader = DataLoader(
@@ -144,7 +144,7 @@ def get_loader(
         num_workers=num_workers,
         shuffle=True,
         pin_memory=True,
-        drop_last=True
+        drop_last=False
     )
 
     loaders = OrderedDict()
