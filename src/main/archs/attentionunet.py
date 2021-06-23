@@ -14,12 +14,7 @@ from timm.models.efficientnet_blocks import DepthwiseSeparableConv, InvertedResi
 # import sys
 # sys.path.append('..')
 from .modules import *
-<<<<<<< HEAD
 from .model_util import init_weights, get_lr_parameters
-=======
-from .model_util import init_weights
-from .model_util import get_lr_parameters
->>>>>>> 6ee483a068663558df43277ac89c34434b626898
 
 __all__ = [
     'Attention_Unet', 
@@ -171,10 +166,7 @@ class Unet_Decoder(nn.Module):
         final = self.out_conv(final)
         decoder_features.append(final)
         return list(reversed(decoder_features))
-<<<<<<< HEAD
         # return final
-=======
->>>>>>> 6ee483a068663558df43277ac89c34434b626898
 
 class Attention_Unet(nn.Module):
     """
@@ -200,10 +192,6 @@ class Attention_Unet(nn.Module):
         decoder_outputs = self.decoder(encoder_outputs)
         # if the input is not divisible by the output stride
         final = decoder_outputs[0]
-<<<<<<< HEAD
-=======
-
->>>>>>> 6ee483a068663558df43277ac89c34434b626898
         if final.size(2) != H or final.size(3) != W:
             final = F.interpolate(final, size=(H, W), mode="bilinear", align_corners=True)
         
@@ -213,7 +201,6 @@ class Attention_Unet(nn.Module):
             for feature_map, supervision  in zip(decoder_outputs, self.supervision):
                 prediction = supervision(feature_map)
                 prediction_list.append(prediction)
-<<<<<<< HEAD
     
             return final, prediction_list[1: ]
         else:
@@ -227,20 +214,6 @@ class Attention_Unet(nn.Module):
     def get_paramgroup(self, base_lr=None):
         lr_dict = {
             "encoder": 0.1,
-=======
-            return final, prediction_list[1: ]
-        else:
-            return final
-
-    def get_num_parameters(self):
-        trainable= int(sum(p.numel() for p in self.parameters() if p.requires_grad))
-        total = int(sum(p.numel() for p in self.parameters()))
-        return trainable, total
-    
-    def get_paramgroup(self, base_lr=None):
-        lr_dict = {
-            "encoder": 0.1
->>>>>>> 6ee483a068663558df43277ac89c34434b626898
         }
         
         lr_group = get_lr_parameters(self, base_lr, lr_dict)

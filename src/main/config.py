@@ -43,14 +43,9 @@ class BaseConfig:
     #     'img_size': 1024,
     #     'num_classes':1,
     #     'pretrained': True,
-<<<<<<< HEAD
     #     'mlp_dims': 256,
     #     'num_heads': 4,
     #     'num_layers': 4
-=======
-    #     'img_size': 512,
-    #     'num_classes':1
->>>>>>> 6ee483a068663558df43277ac89c34434b626898
     # }
 
     model_name = "SegFormerStar"
@@ -91,7 +86,6 @@ class BaseConfig:
     #     "encoder_weights": "imagenet",
     #     "classes": 1,
     # }
-<<<<<<< HEAD
 
     # model_name ="resnet152_fpncat256"
     # model_params = {
@@ -109,15 +103,6 @@ class BaseConfig:
     #     "deep_supervision": True
     # }
 
-=======
-    model_name = "resnet50_attunet"
-    model_params ={
-        "num_classes":1,
-        "pretrained": True,
-        "drop_rate": 0.1,
-        "deep_supervision": True
-    }
->>>>>>> 6ee483a068663558df43277ac89c34434b626898
     # model_name = "hubmap_kaggle"
     # model_params = {
     #     'deep_supervision': True,
@@ -162,11 +147,7 @@ class BaseConfig:
     # https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou
     # Should we use IOU loss instead of Dice loss in this case ?
     criterion = {"bce": 0.8, 'log_dice':0.2}
-<<<<<<< HEAD
     criterion_clf = 'bce'
-=======
-    # criterion_clf = 'bce'
->>>>>>> 6ee483a068663558df43277ac89c34434b626898
     deep_supervision = True
     if deep_supervision:
         criterion_ds = "bce"
