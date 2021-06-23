@@ -43,9 +43,12 @@ python-multipart = "*"
 ml-collections = "*"
 einops = "*"
 iterative-stratification = "*"
+typing-extensions = "*"
+psutil = "*"
+requests = "*"
 
 [dev-packages]
 autopep8 = "*"
 
 [requires]
-python_version = "3.7"
+python_version = "3.8"

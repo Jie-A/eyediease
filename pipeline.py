@@ -15,7 +15,7 @@ from src.main.stat_result import export_result
 logging.basicConfig(level=logging.INFO)
 
 def parse_arg():
-    parse = argparse.ArgumentParser()
+    parse = argparse.ArgumentParser()   
     parse.add_argument('--createprob', default='false', type=str, help='Just create a probability mask not binary')
     parse.add_argument('--optim_thres', default=0.0, help='Optimal threshold obtain from AUC-PR curve')
     parse.add_argument('--best', default='true', type=str, 
@@ -30,7 +30,7 @@ def start_experiment(args):
     n_devices = torch.cuda.device_count()
     logging.info(f'Start using {n_devices} GPUs')
     exp_name = datetime.now().strftime("%b%d_%H_%M")
-    # exp_name = 'Jun14_11_32'
+    # exp_name = 'Jun18_18_33'
     logging.info(f'Performing experiment {exp_name}')
     os.environ['CUDA_VISIBLE_DEVICES']=','.join([str(i) for i in range(n_devices)])
     SEED = 1999
@@ -49,6 +49,8 @@ def start_experiment(args):
     """)
     configs = BaseConfig.get_all_attributes()
     train_model(exp_name, configs, SEED)
+    # from jarviscloud import pause
+    # pause()
 
     logging.info("""
     *************************************************************
@@ -113,8 +115,8 @@ def start_experiment(args):
     """)
 
 if __name__ == '__main__':
-    subprocess.call(['wget', 'https://github.com/plotly/orca/releases/download/v1.2.1/orca-1.2.1-x86_64.AppImage', '-O', '/usr/local/bin/orca'])
-    subprocess.call(['chmod', '+x', '/usr/local/bin/orca'])
-    subprocess.call(['apt-get', 'install', 'xvfb', 'libgtk2.0-0', 'libgconf-2-4'])
+    # subprocess.call(['wget', 'https://github.com/plotly/orca/releases/download/v1.2.1/orca-1.2.1-x86_64.AppImage', '-O', '/usr/local/bin/orca'])
+    # subprocess.call(['chmod', '+x', '/usr/local/bin/orca'])
+    # subprocess.call(['apt-get', 'install', 'xvfb', 'libgtk2.0-0', 'libgconf-2-4'])
     args = parse_arg()
     start_experiment(args)
