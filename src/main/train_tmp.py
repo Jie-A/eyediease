@@ -239,26 +239,8 @@ def train_model(exp_name, configs, seed):
                 if isinstance(m, bn_types):
                     m.eval()
 
-    param_group = model.get_paramgroup(configs['learning_rate_decode'])
+    param_group = model.get_paramgroup(weight_decay=configs['weight_decay'])
     trainable, total = model.get_num_parameters()
-    # param_group = []
-    # if hasattr(model, 'encoder'):
-    #     encoder_params = filter(lambda p: p.requires_grad, model.encoder.parameters())
-    #     param_group += [{'params': encoder_params, 'lr': configs['learning_rate']}]        
-    # if hasattr(model, 'decoder'):
-    #     decoder_params = filter(lambda p: p.requires_grad, model.decoder.parameters())
-    #     param_group += [{'params': decoder_params}]        
-    # if hasattr(model, 'segmentation_head'):
-    #     head_params = filter(lambda p: p.requires_grad, model.segmentation_head.parameters())
-    #     param_group += [{'params': head_params}]        
-    # if hasattr(model, 'supervision'):
-    #     deep_params = filter(lambda p: p.requires_grad, model.supervision.parameters())
-    #     param_group += [{'params': deep_params}]        
-    # if len(param_group) == 0:
-    #     param_group = [{'params': filter(lambda p: p.requires_grad, model.parameters())}]
-
-    # total = int(sum(p.numel() for p in model.parameters()))
-    # trainable = int(sum(p.numel() for p in model.parameters() if p.requires_grad))
     count_parameters = {"total": total, "trainable": trainable}
 
     logging.info(

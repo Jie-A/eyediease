@@ -8,7 +8,7 @@ from pytorch_toolbelt.modules.encoders import EncoderModule
 from torch import nn
 from torch.nn import functional as F
 from pytorch_toolbelt.modules.encoders.timm import B4Encoder, B2Encoder
-
+from .model_util import get_lr_parameters
 
 __all__ = [
     "FPNSumSegmentationModel",
@@ -113,6 +113,20 @@ class FPNCatSegmentationModel(nn.Module):
             return mask, prediction_list
         else:
             return mask
+
+    def get_num_parameters(self):
+        trainable= int(sum(p.numel() for p in self.parameters() if p.requires_grad))
+        total = int(sum(p.numel() for p in self.parameters()))
+        return trainable, total
+    
+    def get_paramgroup(self, base_lr=None):
+        lr_dict = {
+            "encoder": 0.1
+        }
+        
+        lr_group = get_lr_parameters(self, base_lr, lr_dict)
+        return lr_group
+
 
 
 def resnet34_fpncat128(num_classes=5, dropout=0.0, pretrained=True, deep_supervision=False):

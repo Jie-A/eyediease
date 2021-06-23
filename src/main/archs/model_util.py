@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Dict
+from typing import Dict, Tuple, Any, List
 
 from torch.autograd import Variable
 import torch.cuda.amp as amp
@@ -70,6 +70,30 @@ def get_lr_parameters(m: nn.Module, learning_rate: float, lr_group = Dict[str, f
             custom_lr_params["default"]["params"].append(params)
 
     return list(custom_lr_params.values())
+
+def add_weight_decay(model: nn.Module, weight_decay: float = 1e-5, skip_list: Tuple = ()) -> List[Dict[str, Any]]:
+    """Remove weight decay from BatchNorm and Bias parameters.
+
+    https://discuss.pytorch.org/t/weight-decay-in-the-optimizers-is-a-bad-idea-especially-with-batchnorm/16994/3
+
+    Args:
+        model:
+        weight_decay:
+        skip_list:
+
+    Returns:
+
+    """
+    decay = []
+    no_decay = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue  # frozen weights
+        if len(param.shape) == 1 or name.endswith(".bias") or name in skip_list:
+            no_decay.append(param)
+        else:
+            decay.append(param)
+    return [{"params": no_decay, "weight_decay": 0.0}, {"params": decay, "weight_decay": weight_decay}]
 
 
 '''

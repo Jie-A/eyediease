@@ -1,11 +1,12 @@
 import torch.nn as nn
 import numpy as np
-from . import attentionunet, hrnet, doubleunet, dbunet, unet, rcnn_unet, sa_unet, hed, fpn, unets, deeplab, transunet, unetplusplusstar, LeeJunHyun_impl, unet3plus, axial_attentionunet, dcunet, resunetplusplus, deep_supunetplusplus, hubmap_kaggle, deep_supdeeplabv3plus
+from . import attentionunet, hrnet, doubleunet, dbunet, unet, rcnn_unet, sa_unet, hed, fpn, unets, deeplab, transunet, unetplusplusstar, LeeJunHyun_impl, unet3plus, axial_attentionunet, dcunet, resunetplusplus, deep_supunetplusplus, hubmap_kaggle, deep_supdeeplabv3plus, transunetv2, segformerstar
 
 __all__ = ['list_models', 'get_model', 'get_preprocessing_fn']
 
 MODEL_REGISTRY = {
     "resnet50_attunet": attentionunet.resnet50_attunet, 
+    "seresnet50_attunet":attentionunet.seresnet50_attunet,
     "efficientnetb2_attunet": attentionunet.efficientnetb2_attunet,
     "mobilenetv3_attunet": attentionunet.mobilenetv3_attunet,
     "swin_tiny_attunet": attentionunet.swin_tiny_attunet,
@@ -34,6 +35,7 @@ MODEL_REGISTRY = {
     "resnet34_fpncat128": fpn.resnet34_fpncat128,
     "resnet152_fpncat256": fpn.resnet152_fpncat256,
     "transunet_r50": transunet.TransUnet_R50,
+    "transunet_b16": transunet.TransUnet_B16,
     "unetplusplusstar": unetplusplusstar.UnetPlusPlusStar,
     "LeeJunHyun_impl_att": LeeJunHyun_impl.AttU_Net,
     "LeeJunHyun_impl_R2U_Net": LeeJunHyun_impl.R2U_Net,
@@ -49,7 +51,9 @@ MODEL_REGISTRY = {
     "resunetplusplus": resunetplusplus.ResUnetPlusPlus,
     "unetplusplus_deepsup": deep_supunetplusplus.UnetPlusPlus,
     "hubmap_kaggle": hubmap_kaggle.UNET_SERESNEXT101,
-    "deeplabv3plus_deepsup": deep_supdeeplabv3plus.DeepLabV3Plus
+    "deeplabv3plus_deepsup": deep_supdeeplabv3plus.DeepLabV3Plus,
+    "TransUnet_V2": transunetv2.TransUnet,
+    "SegFormerStar": segformerstar.SegformerStar
 }
 
 def get_preprocessing_fn(dataset_name: str, grayscale: bool):

@@ -16,8 +16,10 @@ from pytorch_toolbelt.utils import count_parameters
 import logging
 
 logger = logging.getLogger(__name__)
+
 # import sys
 # sys.path.append('..')
+
 from ...util.checkpoint import load_checkpoint 
 
 class Mlp(nn.Module):
@@ -675,3 +677,5 @@ if __name__ == '__main__':
 
     for o in output:
         print(o.shape)
+
+    print(model)

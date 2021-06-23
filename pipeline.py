@@ -8,7 +8,7 @@ import logging
 import subprocess
 
 from src.main.config import BaseConfig, TestConfig
-from src.main.train import train_model
+from src.main.train_tmp import train_model
 from src.main.tta import *
 from src.main.stat_result import export_result
 

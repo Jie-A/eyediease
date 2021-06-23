@@ -206,15 +206,15 @@ class Block(nn.Module):
             self.attn.value.bias.copy_(value_bias)
             self.attn.out.bias.copy_(out_bias)
 
-            mlp_weight_0 = np2th(weights[pjoin(ROOT, FC_0, "kernel")]).t()
-            mlp_weight_1 = np2th(weights[pjoin(ROOT, FC_1, "kernel")]).t()
-            mlp_bias_0 = np2th(weights[pjoin(ROOT, FC_0, "bias")]).t()
-            mlp_bias_1 = np2th(weights[pjoin(ROOT, FC_1, "bias")]).t()
+            # mlp_weight_0 = np2th(weights[pjoin(ROOT, FC_0, "kernel")]).t()
+            # mlp_weight_1 = np2th(weights[pjoin(ROOT, FC_1, "kernel")]).t()
+            # mlp_bias_0 = np2th(weights[pjoin(ROOT, FC_0, "bias")]).t()
+            # mlp_bias_1 = np2th(weights[pjoin(ROOT, FC_1, "bias")]).t()
 
-            self.ffn.fc1.weight.copy_(mlp_weight_0)
-            self.ffn.fc2.weight.copy_(mlp_weight_1)
-            self.ffn.fc1.bias.copy_(mlp_bias_0)
-            self.ffn.fc2.bias.copy_(mlp_bias_1)
+            # self.ffn.fc1.weight.copy_(mlp_weight_0)
+            # self.ffn.fc2.weight.copy_(mlp_weight_1)
+            # self.ffn.fc1.bias.copy_(mlp_bias_0)
+            # self.ffn.fc2.bias.copy_(mlp_bias_1)
 
             self.attention_norm.weight.copy_(np2th(weights[pjoin(ROOT, ATTENTION_NORM, "scale")]))
             self.attention_norm.bias.copy_(np2th(weights[pjoin(ROOT, ATTENTION_NORM, "bias")]))
@@ -470,6 +470,8 @@ def get_b16_config():
 
     config.decoder_channels = (256, 128, 64, 16)
     config.n_classes = 1
+    config.n_skip = 3
+    config.skip_channels = [512, 256, 64, 16]
     config.activation = None
     return config
 
@@ -514,11 +516,28 @@ CONFIGS = {
     'testing': get_testing(),
 }
 
+def TransUnet_B16(pretrained=True, img_size=1024, num_classes=1, mlp_dims=1024, num_heads=4, num_layers=4, attention_dropout_rate=0.1):
+    config = CONFIGS['ViT-B_16']
+    config.n_classes = num_classes
+    config.transformer.mlp_dim = mlp_dims
+    config.transformer.num_heads =num_heads
+    config.transformer.num_layers =num_layers
+    config.transformer.attention_dropout_rate = attention_dropout_rate
+    model = VisionTransformer(config, img_size=img_size, num_classes=num_classes)
+    if pretrained:
+        weights = np.load(config.pretrained_path)
+        model.load_from(weights=weights)
 
-def TransUnet_R50(pretrained=True, img_size=1024, num_classes=1):
+    return model
+
+def TransUnet_R50(pretrained=True, img_size=1024, num_classes=1, mlp_dims=1024, num_heads=4, num_layers=4, attention_dropout_rate=0.1):
     config = CONFIGS['R50-ViT-B_16']
     config.patches.grid = (int(img_size / config.patches.size[0]), int(img_size / config.patches.size[1]))
     config.n_classes = num_classes
+    config.transformer.mlp_dim = mlp_dims
+    config.transformer.num_heads =num_heads
+    config.transformer.num_layers =num_layers
+    config.transformer.attention_dropout_rate = attention_dropout_rate
     model = VisionTransformer(config, img_size=img_size, num_classes=num_classes)
     if pretrained:
         weights = np.load(config.pretrained_path)
@@ -529,11 +548,9 @@ def TransUnet_R50(pretrained=True, img_size=1024, num_classes=1):
 
 if __name__ == '__main__':
     from torch.cuda import amp
-    model = TransUnet_R50(True, img_size=256).cuda()
-    a = torch.rand(2, 3, 256, 256).cuda()
-    print(hasattr(model, 'encoder'))
-    print(hasattr(model, 'decoder'))
-    print(hasattr(model, 'segmentation_head'))
+    model = TransUnet_R50(pretrained=True, img_size=1024, num_classes=1, mlp_dims=256, num_heads=4, num_layers=4).cuda()
+    a = torch.rand(1, 3, 1024, 1024).cuda()
+
     with amp.autocast():
         output = model(a)
     print(output.shape)

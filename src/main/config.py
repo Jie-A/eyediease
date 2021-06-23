@@ -19,7 +19,7 @@ class BaseConfig:
     # train_img_path = Path(__basedir__) / dataset_name / 'train/image'
     # train_mask_path = Path(__basedir__) / dataset_name / 'train/mask'
 
-    lesion_type = 'EX'
+    lesion_type = 'MA'
     data_mode = 'binary' 
     gray = False
     augmentation = 'advanced' #options: normal, easy, medium, advanced
@@ -35,16 +35,35 @@ class BaseConfig:
     learning_rate = 1e-3
     learning_rate_decode = 1e-4
     weight_decay = 1e-5
-    is_fp16 = True
+    is_fp16 = False
 
     #first
     # model_name = "transunet_r50"
     # model_params = {
+    #     'img_size': 1024,
+    #     'num_classes':1,
     #     'pretrained': True,
-    #     'img_size': 256,
-    #     'num_classes':1
+    #     'mlp_dims': 256,
+    #     'num_heads': 4,
+    #     'num_layers': 4
     # }
 
+    model_name = "SegFormerStar"
+    model_params = {
+        "backbone": "mit_b0",
+        "deep_supervision": False,
+        "clfhead": True,
+        "pretrained": True
+    }
+    # model_name = "TransUnet_V2"
+    # model_params = {
+    #     "img_dim": 1024,
+    #     "in_channels": 3,
+    #     "classes": 1,
+    #     "vit_blocks":4, 
+    #     "vit_heads":4,
+    #     "vit_dim_linear_mhsa_block": 256
+    # }
     # model_name = "medt"
     # model_params = {
     #     "img_size": 256,
@@ -61,14 +80,28 @@ class BaseConfig:
     #     "deep_supervision": True,
     #     "drop_block_prob": 0.1
     # }
-    model_name = "unetplusplus_deepsup"
-    model_params = {
-        "encoder_name": "se_resnet50",
-        "encoder_weights": "imagenet",
-        "decoder_attention_type": "scse",
-        "classes": 1,
-        "deep_supervision": False
-    }
+    # model_name = "deeplabv3plus_deepsup"
+    # model_params = {
+    #     "encoder_name": "se_resnet50",
+    #     "encoder_weights": "imagenet",
+    #     "classes": 1,
+    # }
+
+    # model_name ="resnet152_fpncat256"
+    # model_params = {
+    #     "num_classes": 1,
+    #     "dropout": 0.1,
+    #     "pretrained": True,
+    #     "deep_supervision": True
+    # }
+
+    # model_name = "seresnet50_attunet"
+    # model_params = {
+    #     "num_classes":1,
+    #     "drop_rate": 0.1,
+    #     "pretrained": True,
+    #     "deep_supervision": True
+    # }
 
     # model_name = "hubmap_kaggle"
     # model_params = {
@@ -86,11 +119,11 @@ class BaseConfig:
 #     model_name = "TransUnet"
 #     model_params = {
 #         "in_channels": 3, 
-#         "img_dim": 512, 
+#         "img_dim": 1024, 
 #         "classes": 1, 
 #         "vit_blocks": 8, 
 #         "vit_dim_linear_mhsa_block": 1024
-#    }3
+#    }
     # model_name = 'swin_tiny_attunet'
     # model_params = {
     #     'num_classes':1, 
@@ -111,8 +144,8 @@ class BaseConfig:
     # https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou
     # Should we use IOU loss instead of Dice loss in this case ?
     criterion = {"bce": 0.8, 'log_dice':0.2}
-    # criterion_clf = 'bce'
-    deep_supervision = False
+    criterion_clf = 'bce'
+    deep_supervision = True
     if deep_supervision:
         criterion_ds = "bce"
 
@@ -120,7 +153,7 @@ class BaseConfig:
     optimizer = "adamw"
     scheduler = "cosr"
 
-    resume_path = "models/IDRiD/EX/Jun18_10_20/checkpoints/best_full.pth" #Resume training
+    resume_path = None #Resume training
 
     @classmethod
     def get_all_attributes(cls):
