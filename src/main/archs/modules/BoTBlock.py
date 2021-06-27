@@ -304,7 +304,6 @@ class BottleBlock(nn.Module):
         dim_head = 128,
         rel_pos_emb = False,
         activation = nn.ReLU(),
-        use_axial = False
     ):
         super().__init__()
 

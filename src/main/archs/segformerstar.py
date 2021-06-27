@@ -413,15 +413,14 @@ BACKBONE = {
     },
 }
 
-
 def init_weight(m):
     if isinstance(m, nn.Linear):
         trunc_normal_(m.weight, std=.02)
         if isinstance(m, nn.Linear) and m.bias is not None:
             nn.init.constant_(m.bias, 0)
-    elif isinstance(m, nn.BatchNorm2d):
+    elif isinstance(m, nn.LayerNorm):
         nn.init.constant_(m.bias, 0)
-        nn.init.normal_(m.weight, 1, 0.02)
+        nn.init.constant_(m.weight, 1.0)
     elif isinstance(m, nn.Conv2d):
         fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
         fan_out //= m.groups
@@ -487,31 +486,33 @@ class CenterBlock(nn.Module):
     def __init__(self, in_channel, out_channel):
         super().__init__()
         self.conv = conv3x3(in_channel, out_channel).apply(init_weight)
-        
+        self.In1 = nn.InstanceNorm2d(in_channel).apply(init_weight)
+
     def forward(self, inputs):
         x = self.conv(inputs)
+        x = F.relu(self.In1(x))
         return x
 
 class DecodeBlock(nn.Module):
     def __init__(self, in_channel, out_channel, upsample):
         super().__init__()
-        self.bn1 = nn.BatchNorm2d(in_channel).apply(init_weight)
+        self.In1 = nn.InstanceNorm2d(in_channel).apply(init_weight)
         self.upsample = nn.Sequential()
         if upsample:
             self.upsample.add_module('upsample',nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False))
         self.conv3x3_1 = conv3x3(in_channel, in_channel).apply(init_weight)
-        self.bn2 = nn.BatchNorm2d(in_channel).apply(init_weight)
+        self.In2 = nn.InstanceNorm2d(in_channel).apply(init_weight)
         self.conv3x3_2 = conv3x3(in_channel, out_channel).apply(init_weight)
         self.cbam = CBAM(out_channel, reduction=16)
         self.conv1x1 = conv1x1(in_channel, out_channel).apply(init_weight)
         
     def forward(self, inputs):
-        x  = F.relu(self.bn1(inputs))
+        x  = inputs
         x  = self.upsample(x)
         x  = self.conv3x3_1(x)
-        x  = self.conv3x3_2(F.relu(self.bn2(x)))
+        x  = F.relu(self.In1(self.conv3x3_2(x)))
         x  = self.cbam(x)
-        x += self.conv1x1(self.upsample(inputs)) #shortcut
+        x += F.relu(self.In2(self.conv1x1(self.upsample(inputs)))) #shortcut
         return x
 
 class SegformerStar(nn.Module):
@@ -546,25 +547,28 @@ class SegformerStar(nn.Module):
         self.deep3 = conv1x1(64,1).apply(init_weight)
         self.deep2 = conv1x1(64,1).apply(init_weight)
         self.deep1 = conv1x1(64,1).apply(init_weight)
-        
         #final conv
-        self.final_conv = nn.Sequential(
-            conv3x3(320,64).apply(init_weight),
-            nn.ELU(True),
-            conv1x1(64,1).apply(init_weight)
-        )
-        
+        self.final_conv = conv1x1(64,1).apply(init_weight)
+
+        #Queries
+        self.que4 = conv1x1(64,1).apply(init_weight)
+        self.que3 = conv1x1(64,1).apply(init_weight)
+        self.que2 = conv1x1(64,1).apply(init_weight)
+        self.que1 = conv1x1(64,1).apply(init_weight)
+        self.que0 = conv1x1(64,1).apply(init_weight)
+
         #clf head
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.clf = nn.Sequential(
-            nn.BatchNorm1d(encoder_features[-1]).apply(init_weight),
+            nn.LayerNorm(encoder_features[-1]).apply(init_weight),
             nn.Linear(encoder_features[-1],256).apply(init_weight),
             nn.ELU(True),
-            nn.BatchNorm1d(256).apply(init_weight),
+            nn.LayerNorm(256).apply(init_weight),
             nn.Linear(256,1).apply(init_weight)
         )
 
     def forward(self, x):
+        B, _, H, W = x.shape
         x1, x2, x3, x4 = self.encoder(x)
         
         #clf head
@@ -582,31 +586,37 @@ class SegformerStar(nn.Module):
         y3 = self.upsample3(y3) #->(*,64,h,w)
         y2 = self.upsample2(y2) #->(*,64,h,w)
         y1 = self.upsample1(y1) #->(*,64,h,w)
-        hypercol = torch.cat([y0,y1,y2,y3,y4], dim=1)
-        
-        #final conv
-        logits = self.final_conv(hypercol) #->(*,1,h,w)
-        
+        s4 = self.deep4(y4)
+        s3 = self.deep3(y3)
+        s2 = self.deep2(y2)
+        s1 = self.deep1(y1)
+        s0 = self.final_conv(y0)
+        predictions = torch.cat([s0, s1, s2, s3, s4], dim=1)
+
+        q4 = self.que4(y4)
+        q3 = self.que3(y3)
+        q2 = self.que2(y2)
+        q1 = self.que1(y1)
+        q0 = self.que0(y0)
+        queries = torch.cat([q0, q1, q2, q3, q4], dim=1)
+
+        queries = queries.reshape(B, -1, 1, H, W)
+        attn = F.softmax(queries, dim=1)
+        predictions = predictions.reshape(B, -1, 1, H, W)
+        combined_prediction = torch.sum(attn * predictions, dim=1)
+
         if self.clfhead:
             if self.deep_supervision:
-                s4 = self.deep4(y4)
-                s3 = self.deep3(y3)
-                s2 = self.deep2(y2)
-                s1 = self.deep1(y1)
                 logits_deeps = [s4,s3,s2,s1]
-                return logits, logits_deeps, logits_clf
+                return combined_prediction, logits_deeps, logits_clf
             else:
-                return logits, logits_clf
+                return combined_prediction, logits_clf
         else:
             if self.deep_supervision:
-                s4 = self.deep4(y4)
-                s3 = self.deep3(y3)
-                s2 = self.deep2(y2)
-                s1 = self.deep1(y1)
                 logits_deeps = [s4,s3,s2,s1]
-                return logits, logits_deeps
+                return combined_prediction, logits_deeps
             else:
-                return logits
+                return combined_prediction
 
     def get_num_parameters(self):
         trainable= int(sum(p.numel() for p in self.parameters() if p.requires_grad))
@@ -618,7 +628,6 @@ class SegformerStar(nn.Module):
         return lr_group
 
 if __name__ == '__main__':
-
     import torch.cuda.amp as amp
 
     model = SegformerStar('mit_b0', True, True).cuda()

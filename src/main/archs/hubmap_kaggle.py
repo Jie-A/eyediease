@@ -2,7 +2,7 @@ import torch
 from torch import nn, optim
 import torch.nn.functional as F
 import pretrainedmodels
-from model_util import get_lr_parameters
+from .model_util import get_lr_parameters
 
 
 def conv3x3(in_channel, out_channel): #not change resolusion

@@ -135,7 +135,7 @@ def get_loader(
         num_workers=num_workers,
         shuffle=True,
         pin_memory=True,
-        drop_last=False
+        drop_last=True
     )
 
     valid_loader = DataLoader(

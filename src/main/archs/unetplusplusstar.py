@@ -4,12 +4,13 @@ from torch import nn
 from torch.nn import functional as F
 from segmentation_models_pytorch.base import modules as md
 from typing import Optional, Union, List
+from timm.models.layers import DropPath, DropBlock2d
 # import sys
 # sys.path.append('.')
-from .modules import DropBlock2D
+# from .modules import DropBlock2D
 from .modules import BottleBlock
 from .axial_attention_v2 import AxialAttentionBlock
-from .model_util import get_lr_parameters
+from .model_util import add_weight_decay, get_lr_parameters
 try:
     from inplace_abn import InPlaceABN
 except:
@@ -43,7 +44,7 @@ class Conv2dReLU(nn.Sequential):
             bias=not(use_batchnorm),
         )
 
-        dropblock = DropBlock2D(block_size=7, drop_prob=drop_block_prob)
+        dropblock = DropBlock2d(block_size=7, drop_prob=drop_block_prob)
 
         relu = nn.ReLU(inplace=True)
 
@@ -107,6 +108,17 @@ class SegmentationHead(nn.Sequential):
         activation = md.Activation(activation)
         super().__init__(conv2d, upsampling, activation)
 
+class ClassificationHead(nn.Sequential):
+    def __init__(self, in_channels, classes, pooling="avg", dropout=0.2, activation=None):
+        if pooling not in ("max", "avg"):
+            raise ValueError("Pooling should be one of ('max', 'avg'), got {}.".format(pooling))
+        pool = nn.AdaptiveAvgPool2d(1) if pooling == 'avg' else nn.AdaptiveMaxPool2d(1)
+        flatten = md.Flatten()
+        dropout = nn.Dropout(p=dropout, inplace=True) if dropout else nn.Identity()
+        linear = nn.Linear(in_channels, classes, bias=True)
+        activation = md.Activation(activation)
+        super().__init__(pool, flatten, dropout, linear, activation)
+
 class UnetPlusPlusDecoder(nn.Module):
     def __init__(
             self,
@@ -140,7 +152,7 @@ class UnetPlusPlusDecoder(nn.Module):
         kwargs = dict(use_batchnorm=use_batchnorm, attention_type=attention_type, drop_block_prob=drop_block_prob)
 
         blocks = {}
-        for layer_idx in range(len(self.in_channels) - 1):
+        for layer_idx in range(len(self.in_channels) - 1): 
             for depth_idx in range(layer_idx+1):
                 if depth_idx == 0:
                     in_ch = self.in_channels[layer_idx]
@@ -178,6 +190,7 @@ class UnetPlusPlusDecoder(nn.Module):
                         self.blocks[f'x_{depth_idx}_{dense_l_i}'](dense_x[f'x_{depth_idx}_{dense_l_i-1}'], cat_features)
 
         dense_x[f'x_{0}_{self.depth}'] = self.blocks[f'x_{0}_{self.depth}'](dense_x[f'x_{0}_{self.depth-1}'])
+        
         if self.deep_supervision:
             return dense_x[f'x_{0}_{self.depth}'], [dense_x['x_3_3'], dense_x['x_2_3'], dense_x['x_1_3']]
         else:
@@ -209,6 +222,7 @@ class BoTSER50(nn.Module):
         self.layer1 = seresnet.layer1
         self.layer2 = seresnet.layer2
         self.layer3 = seresnet.layer3
+
         if use_axial:
             block = AxialAttentionBlock(
                 in_channels=2048, 
@@ -222,7 +236,7 @@ class BoTSER50(nn.Module):
                 dim_out=2048,
                 proj_factor=4,
                 downsample=False,
-                heads=4,
+                heads=8,
                 dim_head=128,
                 rel_pos_emb=True,
                 activation=nn.ReLU()
@@ -237,10 +251,6 @@ class BoTSER50(nn.Module):
         self.out_channels = out_channels
 
         if pretrained:
-            #Freeze weights of the first layer`
-            for param in self.layer0.parameters():
-                param.requires_grad = False
-
             for layer  in [self.layer0, self.layer1, self.layer2, self.layer3]:
                 set_bn_eval(layer)
     
@@ -307,7 +317,8 @@ class UnetPlusPlusStar(nn.Module):
             classes: int = 1,
             activation: Optional[Union[str, callable]] = None,
             deep_supervision=False,
-            drop_block_prob=0.1
+            drop_block_prob=0.1,
+            clf_head=False
         ):
             super().__init__()
             self.encoder = get_encoder(encoder_name)
@@ -328,6 +339,12 @@ class UnetPlusPlusStar(nn.Module):
                 activation=activation,
                 kernel_size=3,
             )
+            
+            self.classification_head = ClassificationHead(
+                in_channels=self.encoder.out_channels[-1],
+                classes=classes,
+                dropout=0.1
+            )
 
             self.deep_segmentation_head = nn.ModuleList(
                 [
@@ -340,6 +357,7 @@ class UnetPlusPlusStar(nn.Module):
                 ]
             )
 
+            self.clf_head = clf_head
             self.deep_supervision = deep_supervision
             self.name = f"unetplusplus-{encoder_name}"
             self.initialize()
@@ -349,11 +367,15 @@ class UnetPlusPlusStar(nn.Module):
         initialize(self.decoder)
         initialize(self.segmentation_head)
         initialize(self.deep_segmentation_head)
+        if self.clf_head:
+            initialize(self.classification_head)
 
     def forward(self, x):
         """Sequentially pass `x` trough model`s encoder, decoder and heads"""
         features = self.encoder(x)
+        clf = self.classification_head(features[-1])
         decoder_output = self.decoder(features)
+
         if self.deep_supervision:
             final_output = decoder_output[0]
             deep_outputs = decoder_output[1]
@@ -361,10 +383,16 @@ class UnetPlusPlusStar(nn.Module):
             masks = []
             for feature, segmentation_head in zip(deep_outputs, self.deep_segmentation_head):
                 masks.append(segmentation_head(feature))
+
+            if self.clf_head:
+                return final_mask, masks, clf
             return final_mask, masks
         else:
             final_output = decoder_output
             mask = self.segmentation_head(decoder_output)
+
+            if self.clf_head:
+                return mask, clf
             return mask
 
     def get_num_parameters(self):
@@ -372,8 +400,10 @@ class UnetPlusPlusStar(nn.Module):
         total = int(sum(p.numel() for p in self.parameters()))
         return trainable, total
     
+    
     def get_paramgroup(self, base_lr=None):
         lr_dict = {
+            "encoder.layer0": 0.1,
             "encoder.layer1": 0.1,
             "encoder.layer2": 0.1,
             "encoder.layer3": 0.1,
@@ -381,7 +411,6 @@ class UnetPlusPlusStar(nn.Module):
         
         lr_group = get_lr_parameters(self, base_lr, lr_dict)
         return lr_group
-
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
 import torch.nn as nn
 import numpy as np
-from . import attentionunet, hrnet, doubleunet, dbunet, unet, rcnn_unet, sa_unet, hed, fpn, unets, deeplab, transunet, unetplusplusstar, LeeJunHyun_impl, unet3plus, axial_attentionunet, dcunet, resunetplusplus, deep_supunetplusplus, hubmap_kaggle, deep_supdeeplabv3plus, transunetv2, segformerstar
+from . import attentionunet, hrnet, doubleunet, dbunet, unet, rcnn_unet, sa_unet, hed, fpn, unets, deeplab, transunet, unetplusplusstar, LeeJunHyun_impl, unet3plus, axial_attentionunet, dcunet, resunetplusplus, deep_supunetplusplus, hubmap_kaggle, deep_supdeeplabv3plus, transunetv2, segformerstar, swinformerstar
 
 __all__ = ['list_models', 'get_model', 'get_preprocessing_fn']
 
@@ -54,7 +54,8 @@ MODEL_REGISTRY = {
     "hubmap_kaggle": hubmap_kaggle.UNET_SERESNEXT101,
     "deeplabv3plus_deepsup": deep_supdeeplabv3plus.DeepLabV3Plus,
     "TransUnet_V2": transunetv2.TransUnet,
-    "SegFormerStar": segformerstar.SegformerStar
+    "SegFormerStar": segformerstar.SegformerStar,
+    "SwinformerStar": swinformerstar.SwinformerStar
 }
 
 def get_preprocessing_fn(dataset_name: str, grayscale: bool):

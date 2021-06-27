@@ -144,7 +144,7 @@ def get_loader(
         num_workers=num_workers,
         shuffle=True,
         pin_memory=True,
-        drop_last=True
+        drop_last=False
     )
 
     loaders = OrderedDict()
@@ -268,85 +268,13 @@ def train_model(exp_name, configs, seed):
     loss_fn = get_loss(configs['criterion_clf'])
     criterion_clf[configs['criterion_clf']] = loss_fn
 
-
-    #Define callbacks
-    callbacks = []
-    losses = []
-    for loss_name, loss_weight in configs['criterion'].items():
-        criterion_callback = CriterionCallback(
-            input_key="mask",
-            output_key="logits",
-            criterion_key=loss_name,
-            prefix="loss_"+loss_name,
-            multiplier=float(loss_weight)
-        )
-
-        callbacks.append(criterion_callback)
-        losses.append(criterion_callback.prefix)
-
-    callbacks += [MetricAggregationCallback(
-        prefix="loss",
-        mode="sum",
-        metrics=losses
-    )]
-
-    if isinstance(scheduler, (CyclicLR, OneCycleLRWithWarmup)):
-        callbacks += [SchedulerCallback(mode="batch")]
-    elif isinstance(scheduler, (ReduceLROnPlateau)):
-        callbacks += [SchedulerCallback(reduced_metric=configs['metric'])]
-
-    hyper_callbacks = HyperParametersCallback(configs)
-
-    if configs['data_mode'] == 'binary':
-        image_format = 'gray' if configs['gray'] else 'rgb'
-        visualize_predictions = partial(
-            draw_binary_segmentation_predictions, image_key="image", targets_key="mask", mean=mean, std=std, image_format=image_format
-        )
-    # elif configs['data_mode'] == 'multilabel':
-    #     visualize_predictions = partial(
-    #         draw_multilabel_segmentation_predictions, image_key="image", targets_key="mask", class_colors=CLASS_COLORS
-    #     )
-
-    show_batches_1 = ShowPolarBatchesCallback(
-        visualize_predictions, metric="iou", minimize=False)
-
-    # show_batches_2 = ShowPolarBatchesCallback(
-    #     visualize_predictions, metric="loss", minimize=True)
-
-    early_stopping = EarlyStoppingCallback(
-        patience=20, metric=configs['metric'], minimize=False)
-
-    iou_scores = IouCallback(
-        input_key="mask",
-        activation="Sigmoid",
-        threshold=0.5
-    )
-
-    dice_scores = DiceCallback(
-        input_key="mask",
-        activation="Sigmoid",
-        threshold=0.5
-    )
-
-    # aucpr_scores = AucPRMetricCallback(
-    #     input_key="mask",
-    # )
-
-    # aucroc_scores = RocAucMetricCallback(
-    #     input_key="mask",
-    # )
-    #End define
-    # if configs['resume'] is not None:
-    #     exp_name = configs['resume'].split(os.path.sep)[-3]
-
     prefix = f"{configs['lesion_type']}/{exp_name}"
     log_dir = os.path.join("models/", configs['dataset_name'], prefix)
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-    # if configs['kfold']:
-    #     logger = WandbLogger(project=lesion_dict[configs['lesion_type']].project_name,
-    #                      name=)
+    early_stopping = EarlyStoppingCallback(
+            patience=20, metric=configs['metric'], minimize=False)
 
     logger = WandbLogger(project=lesion_dict[configs['lesion_type']].project_name,
                          name=exp_name)
@@ -357,18 +285,7 @@ def train_model(exp_name, configs, seed):
         configs['train_img_path'] = str(configs['train_img_path'])
         configs['train_mask_path'] = str(configs['train_mask_path'])
         json.dump(configs, f)
-
-    callbacks += [hyper_callbacks, early_stopping,
-                  iou_scores, dice_scores, show_batches_1, logger]
-
     
-    # class CustomRunner(dl.SupervisedRunner):
-    #     def _handle_batch(self, batch):
-    #         x, y = batch
-
-    #         y_pred = self.model(x)
-    #         pass
-
     if configs['is_fp16']:
         fp16_params = dict(amp=True)  # params for FP16
     else:
@@ -376,9 +293,64 @@ def train_model(exp_name, configs, seed):
         
     # model training
     if not configs['deep_supervision']:
-        runner = SupervisedRunner(
-            device=utils.get_device(), input_key="image", input_target_key="mask")
+        #Define callbacks
+        callbacks = []
 
+        if isinstance(scheduler, (CyclicLR, OneCycleLRWithWarmup)):
+            callbacks += [SchedulerCallback(mode="batch")]
+        elif isinstance(scheduler, (ReduceLROnPlateau)):
+            callbacks += [SchedulerCallback(reduced_metric=configs['metric'])]
+
+        hyper_callbacks = HyperParametersCallback(configs)
+
+        # if configs['data_mode'] == 'binary':
+        #     image_format = 'gray' if configs['gray'] else 'rgb'
+        #     visualize_predictions = partial(
+        #         draw_binary_segmentation_predictions, image_key="image", targets_key="mask", mean=mean, std=std, image_format=image_format
+        #     )
+
+        # show_batches_1 = ShowPolarBatchesCallback(
+        #     visualize_predictions, metric="iou", minimize=False)
+
+        callbacks += [hyper_callbacks, early_stopping, logger]
+
+        class CustomRunner(dl.Runner):
+            def _handle_batch(self, batch):
+                results = batch
+                x = results['image']
+                y = results['mask']
+                y_clf = results['label']
+                y_hat, y_label = self.model(x)
+
+                loss_final = None  
+                loss_com = {}
+                for loss_name, loss_weight in configs['criterion'].items():
+                    loss_com['loss_' + loss_name] = criterion[loss_name](y_hat, y) 
+                    if loss_final is None:
+                        loss_final = criterion[loss_name](y_hat, y)*float(loss_weight)
+                    else:
+                        loss_final += criterion[loss_name](y_hat,y)*float(loss_weight)
+
+                loss_clf = criterion_clf[configs['criterion_clf']](y_label.squeeze(-1), y_clf)
+                
+                loss = loss_final + 10*loss_clf
+
+                target = y
+                pred = torch.sigmoid(y_hat)
+                dice  = metrics.dice(pred, target, threshold=0.5).mean()
+                iou = metrics.iou(pred, target, threshold=0.5).mean()
+    
+                self.batch_metrics = {
+                    'loss': loss,
+                    'loss_clf': loss_clf,
+                    'dice': dice,
+                    'iou': iou
+                }
+
+                for key in loss_com:
+                    self.batch_metrics[key] = loss_com[key]
+
+        runner = CustomRunner(device=utils.get_device())
         runner.train(
             model=model,
             criterion=criterion,

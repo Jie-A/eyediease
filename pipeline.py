@@ -8,7 +8,7 @@ import logging
 import subprocess
 
 from src.main.config import BaseConfig, TestConfig
-from src.main.train_tmp import train_model
+from src.main.train import train_model
 from src.main.tta import *
 from src.main.stat_result import export_result
 
@@ -30,7 +30,7 @@ def start_experiment(args):
     n_devices = torch.cuda.device_count()
     logging.info(f'Start using {n_devices} GPUs')
     exp_name = datetime.now().strftime("%b%d_%H_%M")
-    # exp_name = 'Jun18_18_33'
+    # exp_name = 'Jun25_14_06'
     logging.info(f'Performing experiment {exp_name}')
     os.environ['CUDA_VISIBLE_DEVICES']=','.join([str(i) for i in range(n_devices)])
     SEED = 1999
@@ -115,8 +115,8 @@ def start_experiment(args):
     """)
 
 if __name__ == '__main__':
-    # subprocess.call(['wget', 'https://github.com/plotly/orca/releases/download/v1.2.1/orca-1.2.1-x86_64.AppImage', '-O', '/usr/local/bin/orca'])
-    # subprocess.call(['chmod', '+x', '/usr/local/bin/orca'])
-    # subprocess.call(['apt-get', 'install', 'xvfb', 'libgtk2.0-0', 'libgconf-2-4'])
+    subprocess.call(['wget', 'https://github.com/plotly/orca/releases/download/v1.2.1/orca-1.2.1-x86_64.AppImage', '-O', '/usr/local/bin/orca'])
+    subprocess.call(['chmod', '+x', '/usr/local/bin/orca'])
+    subprocess.call(['apt-get', 'install', 'xvfb', 'libgtk2.0-0', 'libgconf-2-4'])
     args = parse_arg()
     start_experiment(args)

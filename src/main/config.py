@@ -19,7 +19,7 @@ class BaseConfig:
     # train_img_path = Path(__basedir__) / dataset_name / 'train/image'
     # train_mask_path = Path(__basedir__) / dataset_name / 'train/mask'
 
-    lesion_type = 'MA'
+    lesion_type = 'SE'
     data_mode = 'binary' 
     gray = False
     augmentation = 'advanced' #options: normal, easy, medium, advanced
@@ -30,12 +30,12 @@ class BaseConfig:
     #Final
     finetune = False  # Traning only decoder
     num_epochs = 100
-    batch_size = 4
-    val_batch_size = 4
+    batch_size = 2
+    val_batch_size = 2
     learning_rate = 1e-3
-    learning_rate_decode = 1e-3
+    learning_rate_decode = 1e-4
     weight_decay = 1e-5
-    is_fp16 = False
+    is_fp16 = True
 
     #first
     # model_name = "transunet_r50"
@@ -48,13 +48,21 @@ class BaseConfig:
     #     'num_layers': 4
     # }
 
-    model_name = "SegFormerStar"
-    model_params = {
-        "backbone": "mit_b0",
-        "deep_supervision": False,
-        "clfhead": True,
-        "pretrained": True
-    }
+    # model_name = "SegFormerStar"
+    # model_params = {
+    #     "backbone": "mit_b1",
+    #     "deep_supervision": True,
+    #     "clfhead": True,
+    #     "pretrained": True
+    # }
+
+    # model_name = "SwinformerStar"
+    # model_params = {
+    #     "backbone":"swin_tiny",
+    #     "clfhead": True,
+    #     "deep_supervision": True,
+    #     "pretrained": True
+    # }
     # model_name = "TransUnet_V2"
     # model_params = {
     #     "img_dim": 1024,
@@ -70,21 +78,24 @@ class BaseConfig:
     #     "num_classes":1,
     #     "groups": 8
     # }
-    # model_name = 'unetplusplusstar'
-    # model_params = {
-    #     "classes": 1,
-    #     "decoder_attention_type": "scse", 
-    #     "decoder_use_batchnorm": True, 
-    #     "encoder_depth": 5, 
-    #     "encoder_name": "BoTSER50_Axial_Imagenet",
-    #     "deep_supervision": True,
-    #     "drop_block_prob": 0.1
-    # }
+
+    model_name = 'unetplusplusstar'
+    model_params = {
+        "classes": 1,
+        "decoder_attention_type": "scse", 
+        "decoder_use_batchnorm": True, 
+        "encoder_depth": 5, 
+        "encoder_name": "BoTSER50_Imagenet",
+        "deep_supervision": True,
+        "drop_block_prob": 0.1,
+        "clf_head": False
+    }
+
     # model_name = "deeplabv3plus_deepsup"
     # model_params = {
     #     "encoder_name": "se_resnet50",
     #     "encoder_weights": "imagenet",
-    #     "classes": 1,
+    #     "classes": 1
     # }
 
     # model_name ="resnet152_fpncat256"
@@ -92,10 +103,19 @@ class BaseConfig:
     #     "num_classes": 1,
     #     "dropout": 0.1,
     #     "pretrained": True,
-    #     "deep_supervision": True
+    #     "deep_supervision": False
     # }
 
-    # model_name = "seresnet50_attunet"
+    # model_name = "unetplusplus_deepsup"
+    # model_params = {
+    #     "encoder_name": "se_resnet50",
+    #     "encoder_weights": "imagenet",
+    #     "classes": 1,
+    #     "decoder_attention_type": "scse",
+    #     "deep_supervision" : False
+    # }
+
+    # model_name = "resnet50_attunet"
     # model_params = {
     #     "num_classes":1,
     #     "drop_rate": 0.1,
@@ -110,6 +130,8 @@ class BaseConfig:
     #     'clf_threshold': None,
     #     'pretrained': True
     # }
+
+
     # model_name = "Unet3Plus_DS"
     # model_params = {"deep_supervision":True}
 
@@ -127,6 +149,7 @@ class BaseConfig:
 #         "vit_blocks": 8, 
 #         "vit_dim_linear_mhsa_block": 1024
 #    }
+
     # model_name = 'swin_tiny_attunet'
     # model_params = {
     #     'num_classes':1, 
@@ -147,7 +170,7 @@ class BaseConfig:
     # https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou
     # Should we use IOU loss instead of Dice loss in this case ?
     criterion = {"bce": 0.8, 'log_dice':0.2}
-    criterion_clf = 'bce'
+    # criterion_clf = 'bce'
     deep_supervision = True
     if deep_supervision:
         criterion_ds = "bce"
@@ -156,10 +179,10 @@ class BaseConfig:
     optimizer = "adamw"
     scheduler = "cosr"
 
-    resume_path = None #Resume training
+    resume_path = None#Resume training
 
     @classmethod
-    def get_all_attributes(cls):
+    def get_all_attributes(cls):    
         d = {}
         son = dict(cls.__dict__)
         dad = dict(cls.__base__.__dict__)
